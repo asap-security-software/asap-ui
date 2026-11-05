@@ -134,7 +134,10 @@ export function renderStylesheet(): string {
  *
  *   @import "tailwindcss";
  *   @import "@asap-security-software/ui/styles.css";
- *   @source "../node_modules/@asap-security-software/ui/dist";
+ *
+ * \`@source "./index.js"\` is relative to this file. In the published package
+ * that is dist/index.js, next to dist/styles.css, so consumers do not add
+ * their own @source for these components.
  *
  * :root is the light "asap" theme. Dark mode is opt-in:
  *   <html data-asap-theme="asap-dark">
@@ -142,6 +145,8 @@ export function renderStylesheet(): string {
  * A product theme overrides the palette (defineTheme / themeToCss) and sets
  * data-asap-theme to that name. Spacing, type, radius, and motion are shared.
  */
+
+@source "./index.js";
 
 ${light}
 ${dark}

@@ -25,13 +25,14 @@ Peer dependencies: `react` and `react-dom` 19, and `tailwindcss` 4.
 
 ## Use
 
-In the app CSS entry, so Tailwind sees the theme and the component classes:
+In the app CSS entry, so Tailwind processes the theme. Component classes are picked up by `@source "./index.js"` inside the published stylesheet (it sits next to `dist/index.js`). You do not add a `node_modules` path of your own.
 
 ```css
 @import "tailwindcss";
 @import "@asap-security-software/ui/styles.css";
-@source "../node_modules/@asap-security-software/ui/dist";
 ```
+
+Add your own `@source` only for class strings that live outside this package.
 
 ```tsx
 import { Badge, Button } from "@asap-security-software/ui";

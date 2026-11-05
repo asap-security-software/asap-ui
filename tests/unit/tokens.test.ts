@@ -125,6 +125,7 @@ describe("styles.css", () => {
     const generated = renderStylesheet();
     for (const source of [styles, generated]) {
       expect(source).toContain("@theme");
+      expect(source).toContain('@source "./index.js"');
       expect(source).toContain("--color-primary: var(--asap-color-primary)");
       expect(source).toContain("--radius-md: var(--asap-radius-md)");
       expect(source).toContain(".asap-root");

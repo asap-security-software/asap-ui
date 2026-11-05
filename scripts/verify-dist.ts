@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { verifyConsumerStyles } from "./verify-consumer";
 
 const required = [
   "dist/index.js",
@@ -76,4 +77,6 @@ for (const key of [".", "./tokens", "./tailwind-preset", "./styles.css"]) {
   }
 }
 
-console.log("dist exports, client boundary, and publishConfig look right.");
+await verifyConsumerStyles();
+
+console.log("dist exports, client boundary, publishConfig, and consumer CSS look right.");
