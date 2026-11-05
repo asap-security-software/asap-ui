@@ -67,10 +67,55 @@ function Harness() {
   );
 }
 
+function EmptyHarness() {
+  const [value, setValue] = useState("");
+  return (
+    <StatusSelect
+      aria-label="Status"
+      placeholder="Choose a status"
+      value={value}
+      options={options}
+      allowed={["scheduled"]}
+      onValueChange={setValue}
+    />
+  );
+}
+
 describe("StatusSelect", () => {
   test("locks the field when there is nowhere to move", () => {
     render(<StatusSelect aria-label="Status" value="done" options={options} allowed={[]} />);
     expect(screen.getByRole("combobox", { name: "Status" })).toHaveProperty("disabled", true);
+  });
+
+  test("stays controlled when the value starts empty", async () => {
+    const user = userEvent.setup();
+    const messages: string[] = [];
+    const originalError = console.error;
+    const originalWarn = console.warn;
+    const record = (...args: unknown[]) => {
+      messages.push(args.map((arg) => (typeof arg === "string" ? arg : String(arg))).join(" "));
+    };
+    console.error = (...args: unknown[]) => {
+      record(...args);
+      originalError(...args);
+    };
+    console.warn = (...args: unknown[]) => {
+      record(...args);
+      originalWarn(...args);
+    };
+    try {
+      render(<EmptyHarness />);
+      const combo = screen.getByRole("combobox", { name: "Status" });
+      expect(combo.textContent).toContain("Choose a status");
+      await user.click(combo);
+      await user.click(screen.getByRole("option", { name: "Scheduled" }));
+      expect(screen.getByRole("combobox", { name: "Status" }).textContent).toContain("Scheduled");
+      expect(messages.join("\n")).not.toMatch(/changing from uncontrolled to controlled/);
+      expect(messages.join("\n")).not.toMatch(/changing from controlled to uncontrolled/);
+    } finally {
+      console.error = originalError;
+      console.warn = originalWarn;
+    }
   });
 
   test("changes only to an allowed status", async () => {

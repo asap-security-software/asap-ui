@@ -86,7 +86,9 @@ function StatusSelect({
 
   return (
     <Select
-      value={value === "" ? undefined : value}
+      // "" is the controlled empty state. undefined would start Radix Select
+      // uncontrolled and flip it to controlled on the first change.
+      value={value}
       onValueChange={handleValueChange}
       disabled={locked}
       name={name}
