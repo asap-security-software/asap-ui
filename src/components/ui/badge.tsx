@@ -1,18 +1,13 @@
 import { cva, type VariantProps } from "class-variance-authority";
 import type { ComponentProps } from "react";
 import { cn } from "../../lib/utils";
+import { type StatusTone, statusDotClass, statusPillClass } from "./status-tone";
 
 const badgeVariants = cva(
   "inline-flex items-center gap-1.5 rounded-full font-semibold whitespace-nowrap",
   {
     variants: {
-      status: {
-        done: "bg-success-soft text-success-foreground",
-        progress: "bg-primary-soft text-primary-ink",
-        scheduled: "bg-scheduled-soft text-scheduled-foreground",
-        warning: "bg-warning-soft text-warning-foreground",
-        danger: "bg-danger-soft text-danger-foreground",
-      },
+      status: statusPillClass,
       size: {
         sm: "h-6 px-2.5 text-asap-xs",
         md: "h-7 px-2.5 text-asap-sm",
@@ -25,15 +20,7 @@ const badgeVariants = cva(
   },
 );
 
-const dotClass = {
-  done: "bg-success",
-  progress: "bg-primary",
-  scheduled: "bg-scheduled",
-  warning: "bg-warning",
-  danger: "bg-danger",
-} as const;
-
-export type BadgeStatus = NonNullable<VariantProps<typeof badgeVariants>["status"]>;
+export type BadgeStatus = StatusTone;
 
 export type BadgeProps = ComponentProps<"span"> &
   VariantProps<typeof badgeVariants> & {
@@ -44,12 +31,16 @@ export type BadgeProps = ComponentProps<"span"> &
 function Badge({ className, status, size, dot = true, children, ...props }: BadgeProps) {
   const resolved = status ?? "scheduled";
   return (
-    <span className={cn(badgeVariants({ status: resolved, size }), className)} {...props}>
+    <span
+      data-slot="badge"
+      className={cn(badgeVariants({ status: resolved, size }), className)}
+      {...props}
+    >
       {dot ? (
         <span
           aria-hidden
           data-slot="badge-dot"
-          className={cn("size-1.5 shrink-0 rounded-full", dotClass[resolved])}
+          className={cn("size-1.5 shrink-0 rounded-full", statusDotClass[resolved])}
         />
       ) : null}
       {children}

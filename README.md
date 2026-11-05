@@ -2,7 +2,7 @@
 
 Shared React component library for ASAP Security. ProjectView (Next.js on Bun) is the first consumer. Later apps reuse the same components and swap the palette.
 
-This package is the foundation: design tokens, a Tailwind CSS v4 theme, and three shadcn/ui primitives (Button, Badge, Select) that prove the pipeline. Product components (status dropdown rules, drawer, WBS tree, toast) come later.
+0.1.0 (tokens, Button, Badge, Select) is published to GitHub Packages from the `v0.1.0` tag. 0.2.0 adds the core components ProjectView needs. It is not published until a `v0.2.0` tag is pushed.
 
 ## Install
 
@@ -35,12 +35,21 @@ In the app CSS entry, so Tailwind processes the theme. Component classes are pic
 Add your own `@source` only for class strings that live outside this package.
 
 ```tsx
-import { Badge, Button } from "@asap-security-software/ui";
+import { Button, StatusPill, StatusSelect } from "@asap-security-software/ui";
 
 export function TaskAction() {
   return (
     <>
-      <Badge status="progress">In progress</Badge>
+      <StatusPill status="progress">In progress</StatusPill>
+      <StatusSelect
+        value="progress"
+        options={[
+          { value: "progress", label: "In progress", tone: "progress" },
+          { value: "done", label: "Done", tone: "done" },
+        ]}
+        allowed={["done"]}
+        onValueChange={() => {}}
+      />
       <Button size="touch" className="w-full">
         Mark done
       </Button>
@@ -48,6 +57,10 @@ export function TaskAction() {
   );
 }
 ```
+
+`StatusSelect` only lists the current status and the `allowed` moves. Wrap the app once in `TooltipProvider`, and mount `Toaster` where toasts should show. `toastWithUndo(message, onUndo)` is the toast with an Undo action.
+
+Form controls default to 44px (`lg`). Pass `size="touch"` for the 52px technician target on Input, Textarea, Select, StatusSelect, Button, Checkbox, Switch, Tabs, DropdownMenu, and Table.
 
 Put `className="asap-root"` on the app shell if you want the Inter/Geist stack, ink color, paper background, and tabular figures. Load Inter (or Geist) yourself. This package does not ship font files.
 
@@ -118,7 +131,7 @@ Soft and plain. Interactive radius is 9px (10px on the large mobile actions). No
 
 ```sh
 bun run dev            # Storybook on port 6006
-bun run test           # bun:test for cn() and tokens
+bun run test           # bun:test for behavior, tokens, and cn()
 bun run typecheck
 bun run lint           # Biome
 bun run format
@@ -133,4 +146,4 @@ bun run test:visual    # Playwright scaffold; not part of CI
 
 Pushing a `v*.*.*` tag runs `.github/workflows/release.yml`, which publishes to `https://npm.pkg.github.com` with `GITHUB_TOKEN`. Pull requests do not publish.
 
-Version 0.1.0 is this foundation. It has not been published.
+`v0.1.0` published `@asap-security-software/ui@0.1.0`. Do not tag 0.2.0 from this branch.

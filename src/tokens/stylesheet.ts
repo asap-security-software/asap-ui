@@ -100,6 +100,11 @@ function themeMappings(): string {
     "  --default-transition-timing-function: var(--asap-ease-standard);",
     "  --shadow-overlay: var(--asap-shadow-overlay);",
     "  --shadow-hairline: var(--asap-shadow-hairline);",
+    "  --animate-fade-in: asap-fade-in var(--asap-duration-fast) var(--asap-ease-standard);",
+    "  --animate-drawer-right: asap-drawer-right var(--asap-duration-drawer) var(--asap-ease-standard);",
+    "  --animate-drawer-left: asap-drawer-left var(--asap-duration-drawer) var(--asap-ease-standard);",
+    "  --animate-drawer-bottom: asap-drawer-bottom var(--asap-duration-drawer) var(--asap-ease-standard);",
+    "  --animate-drawer-top: asap-drawer-top var(--asap-duration-drawer) var(--asap-ease-standard);",
     "}",
     "",
     "@utility duration-fast {",
@@ -151,6 +156,27 @@ export function renderStylesheet(): string {
 ${light}
 ${dark}
 ${themeMappings()}
+
+@keyframes asap-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes asap-drawer-right {
+  from { opacity: 0; transform: translate3d(12px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes asap-drawer-left {
+  from { opacity: 0; transform: translate3d(-12px, 0, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes asap-drawer-bottom {
+  from { opacity: 0; transform: translate3d(0, 12px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes asap-drawer-top {
+  from { opacity: 0; transform: translate3d(0, -12px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
 
 .asap-root {
   font-family: var(--asap-font-sans);

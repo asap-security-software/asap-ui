@@ -22,6 +22,7 @@ export async function verifyConsumerStyles(): Promise<void> {
     ".bg-success-soft",
     ".shadow-overlay",
     ".text-asap-sm",
+    "animate-drawer-right",
   ]);
 
   const stripped = stripPackageSource(readFileSync(stylesPath, "utf8"));
