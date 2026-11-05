@@ -1,0 +1,259 @@
+/*
+ * @asap-security-software/ui — ASAP tokens and the Tailwind CSS v4 theme.
+ * Generated from src/tokens. Edit the TypeScript source, then run `bun run emit:css`.
+ *
+ * App CSS entry (Tailwind must process this file):
+ *
+ *   @import "tailwindcss";
+ *   @import "@asap-security-software/ui/styles.css";
+ *
+ * `@source "./index.js"` is relative to this file. In the published package
+ * that is dist/index.js, next to dist/styles.css, so consumers do not add
+ * their own @source for these components.
+ *
+ * :root is the light "asap" theme. Dark mode is opt-in:
+ *   <html data-asap-theme="asap-dark">
+ *
+ * A product theme overrides the palette (defineTheme / themeToCss) and sets
+ * data-asap-theme to that name. Spacing, type, radius, and motion are shared.
+ */
+
+@source "./index.js";
+
+:root,
+[data-asap-theme="asap"] {
+  color-scheme: light;
+  --asap-font-sans:
+    "Inter Variable", "Inter", "Geist", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    sans-serif;
+  --asap-font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --asap-font-feature-tabular: "tnum" 1;
+  --asap-font-weight-regular: 400;
+  --asap-font-weight-medium: 500;
+  --asap-font-weight-semibold: 600;
+  --asap-font-weight-bold: 700;
+  --asap-text-2xs: 11px;
+  --asap-text-xs: 12px;
+  --asap-text-sm: 13px;
+  --asap-text-base: 14px;
+  --asap-text-md: 15px;
+  --asap-text-lg: 16px;
+  --asap-text-xl: 17px;
+  --asap-text-2xl: 22px;
+  --asap-text-3xl: 24px;
+  --asap-leading-tight: 1.25;
+  --asap-leading-snug: 1.35;
+  --asap-leading-normal: 1.45;
+  --asap-tracking-tight: -0.02em;
+  --asap-tracking-snug: -0.011em;
+  --asap-tracking-normal: 0em;
+  --asap-tracking-wide: 0.05em;
+  --asap-tracking-eyebrow: 0.07em;
+  --asap-space-0: 0px;
+  --asap-space-1: 4px;
+  --asap-space-2: 8px;
+  --asap-space-3: 12px;
+  --asap-space-4: 16px;
+  --asap-space-5: 20px;
+  --asap-space-6: 24px;
+  --asap-space-7: 28px;
+  --asap-space-8: 32px;
+  --asap-space-9: 36px;
+  --asap-space-10: 40px;
+  --asap-space-12: 48px;
+  --asap-space-14: 56px;
+  --asap-space-16: 64px;
+  --asap-space-20: 80px;
+  --asap-space-24: 96px;
+  --asap-space-px: 1px;
+  --asap-space-0-5: 2px;
+  --asap-space-1-5: 6px;
+  --asap-space-2-5: 10px;
+  --asap-space-3-5: 14px;
+  --asap-space-control-sm: 30px;
+  --asap-space-control: 36px;
+  --asap-space-control-lg: 44px;
+  --asap-space-touch: 52px;
+  --asap-space-touch-min: 48px;
+  --asap-space-page: 28px;
+  --asap-space-content-max: 820px;
+  --asap-radius-xs: 5px;
+  --asap-radius-sm: 7px;
+  --asap-radius-md: 9px;
+  --asap-radius-lg: 10px;
+  --asap-radius-xl: 12px;
+  --asap-radius-full: 999px;
+  --asap-duration-instant: 0ms;
+  --asap-duration-fast: 160ms;
+  --asap-duration-normal: 200ms;
+  --asap-duration-slow: 240ms;
+  --asap-duration-drawer: 260ms;
+  --asap-ease-standard: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --asap-ease-press: cubic-bezier(0.3, 0, 0.2, 1);
+  --asap-shadow-none: none;
+  --asap-shadow-hairline: 0 0 0 1px var(--asap-color-border);
+  --asap-shadow-overlay: 0 4px 16px rgba(31, 28, 26, 0.08);
+  --asap-color-primary: #a60e13;
+  --asap-color-primary-hover: #8c0c10;
+  --asap-color-primary-foreground: #ffffff;
+  --asap-color-primary-soft: #f6ebea;
+  --asap-color-primary-ink: #6d090c;
+  --asap-color-ink: #212121;
+  --asap-color-ink-secondary: #2e2a27;
+  --asap-color-muted: #6f6862;
+  --asap-color-muted-soft: #9a928b;
+  --asap-color-background: #f7f4f0;
+  --asap-color-surface: #fffcf9;
+  --asap-color-surface-muted: #f3efe9;
+  --asap-color-border: #ebe6e1;
+  --asap-color-border-soft: #f0ebe6;
+  --asap-color-success: #3dc372;
+  --asap-color-success-soft: #e5f7ed;
+  --asap-color-success-foreground: #146b3a;
+  --asap-color-warning: #ff9e45;
+  --asap-color-warning-soft: #fff3e6;
+  --asap-color-warning-foreground: #8a4e12;
+  --asap-color-danger: #e44e56;
+  --asap-color-danger-soft: #fdecee;
+  --asap-color-danger-foreground: #9d1c28;
+  --asap-color-scheduled: #6f6862;
+  --asap-color-scheduled-soft: #efeae4;
+  --asap-color-scheduled-foreground: #4d4843;
+  --asap-color-overlay: rgba(31, 28, 26, 0.28);
+}
+
+[data-asap-theme="asap-dark"] {
+  color-scheme: dark;
+  --asap-color-primary: #ff6b6e;
+  --asap-color-primary-hover: #ff8588;
+  --asap-color-primary-foreground: #1a1714;
+  --asap-color-primary-soft: #3a2222;
+  --asap-color-primary-ink: #ffd0d1;
+  --asap-color-ink: #f6f1eb;
+  --asap-color-ink-secondary: #e4ddd4;
+  --asap-color-muted: #b7aea4;
+  --asap-color-muted-soft: #8c837a;
+  --asap-color-background: #161311;
+  --asap-color-surface: #221e1b;
+  --asap-color-surface-muted: #2c2723;
+  --asap-color-border: #3d362f;
+  --asap-color-border-soft: #2f2a26;
+  --asap-color-success: #3dc372;
+  --asap-color-success-soft: #163226;
+  --asap-color-success-foreground: #8ee4b0;
+  --asap-color-warning: #ff9e45;
+  --asap-color-warning-soft: #3a2a18;
+  --asap-color-warning-foreground: #ffd0a6;
+  --asap-color-danger: #ff6b72;
+  --asap-color-danger-soft: #3a1c1e;
+  --asap-color-danger-foreground: #ffc2c5;
+  --asap-color-scheduled: #b7aea4;
+  --asap-color-scheduled-soft: #2c2723;
+  --asap-color-scheduled-foreground: #e4ddd4;
+  --asap-color-overlay: rgba(0, 0, 0, 0.55);
+}
+
+@theme inline {
+  --color-primary: var(--asap-color-primary);
+  --color-primary-hover: var(--asap-color-primary-hover);
+  --color-primary-foreground: var(--asap-color-primary-foreground);
+  --color-primary-soft: var(--asap-color-primary-soft);
+  --color-primary-ink: var(--asap-color-primary-ink);
+  --color-ink: var(--asap-color-ink);
+  --color-ink-secondary: var(--asap-color-ink-secondary);
+  --color-muted: var(--asap-color-muted);
+  --color-muted-soft: var(--asap-color-muted-soft);
+  --color-background: var(--asap-color-background);
+  --color-surface: var(--asap-color-surface);
+  --color-surface-muted: var(--asap-color-surface-muted);
+  --color-border: var(--asap-color-border);
+  --color-border-soft: var(--asap-color-border-soft);
+  --color-success: var(--asap-color-success);
+  --color-success-soft: var(--asap-color-success-soft);
+  --color-success-foreground: var(--asap-color-success-foreground);
+  --color-warning: var(--asap-color-warning);
+  --color-warning-soft: var(--asap-color-warning-soft);
+  --color-warning-foreground: var(--asap-color-warning-foreground);
+  --color-danger: var(--asap-color-danger);
+  --color-danger-soft: var(--asap-color-danger-soft);
+  --color-danger-foreground: var(--asap-color-danger-foreground);
+  --color-scheduled: var(--asap-color-scheduled);
+  --color-scheduled-soft: var(--asap-color-scheduled-soft);
+  --color-scheduled-foreground: var(--asap-color-scheduled-foreground);
+  --color-overlay: var(--asap-color-overlay);
+  --font-sans: var(--asap-font-sans);
+  --font-mono: var(--asap-font-mono);
+  --text-asap-2xs: var(--asap-text-2xs);
+  --text-asap-2xs--line-height: var(--asap-leading-normal);
+  --text-asap-xs: var(--asap-text-xs);
+  --text-asap-xs--line-height: var(--asap-leading-normal);
+  --text-asap-sm: var(--asap-text-sm);
+  --text-asap-sm--line-height: var(--asap-leading-normal);
+  --text-asap-base: var(--asap-text-base);
+  --text-asap-base--line-height: var(--asap-leading-normal);
+  --text-asap-md: var(--asap-text-md);
+  --text-asap-md--line-height: var(--asap-leading-normal);
+  --text-asap-lg: var(--asap-text-lg);
+  --text-asap-lg--line-height: var(--asap-leading-normal);
+  --text-asap-xl: var(--asap-text-xl);
+  --text-asap-xl--line-height: var(--asap-leading-normal);
+  --text-asap-2xl: var(--asap-text-2xl);
+  --text-asap-2xl--line-height: var(--asap-leading-normal);
+  --text-asap-3xl: var(--asap-text-3xl);
+  --text-asap-3xl--line-height: var(--asap-leading-normal);
+  --tracking-asap-tight: var(--asap-tracking-tight);
+  --tracking-asap-snug: var(--asap-tracking-snug);
+  --tracking-asap-normal: var(--asap-tracking-normal);
+  --tracking-asap-wide: var(--asap-tracking-wide);
+  --tracking-asap-eyebrow: var(--asap-tracking-eyebrow);
+  --leading-asap-tight: var(--asap-leading-tight);
+  --leading-asap-snug: var(--asap-leading-snug);
+  --leading-asap-normal: var(--asap-leading-normal);
+  --radius-xs: var(--asap-radius-xs);
+  --radius-sm: var(--asap-radius-sm);
+  --radius-md: var(--asap-radius-md);
+  --radius-lg: var(--asap-radius-lg);
+  --radius-xl: var(--asap-radius-xl);
+  --radius-full: var(--asap-radius-full);
+  --spacing-control-sm: var(--asap-space-control-sm);
+  --spacing-control: var(--asap-space-control);
+  --spacing-control-lg: var(--asap-space-control-lg);
+  --spacing-touch: var(--asap-space-touch);
+  --spacing-touch-min: var(--asap-space-touch-min);
+  --spacing-page: var(--asap-space-page);
+  --container-content: var(--asap-space-content-max);
+  --ease-standard: var(--asap-ease-standard);
+  --default-transition-duration: var(--asap-duration-fast);
+  --default-transition-timing-function: var(--asap-ease-standard);
+  --shadow-overlay: var(--asap-shadow-overlay);
+  --shadow-hairline: var(--asap-shadow-hairline);
+}
+
+@utility duration-fast {
+  transition-duration: var(--asap-duration-fast);
+}
+@utility duration-normal {
+  transition-duration: var(--asap-duration-normal);
+}
+@utility duration-slow {
+  transition-duration: var(--asap-duration-slow);
+}
+
+.asap-root {
+  font-family: var(--asap-font-sans);
+  color: var(--asap-color-ink);
+  background-color: var(--asap-color-background);
+  font-feature-settings: var(--asap-font-feature-tabular);
+  -webkit-font-smoothing: antialiased;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  [data-asap-theme] {
+    --asap-duration-instant: 0ms;
+    --asap-duration-fast: 0ms;
+    --asap-duration-normal: 0ms;
+    --asap-duration-slow: 0ms;
+    --asap-duration-drawer: 0ms;
+  }
+}
