@@ -1,0 +1,74 @@
+name: Storybook Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One Pages deployment at a time. Do not cancel an in-progress deploy.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install
+        run: bun install --frozen-lockfile
+
+      - name: Build Storybook
+        run: bun run build-storybook
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: storybook-static
+
+  # Private Pages needs GitHub Enterprise Cloud on an organization, with the
+  # site already created as public=false. This account is a user, so that
+  # visibility is not available. Leave STORYBOOK_PAGES_ENABLED unset. The
+  # check below still refuses to publish if the variable is set early:
+  # actions/deploy-pages enables Pages when it is missing, and on this
+  # account that site would be public.
+  deploy:
+    if: vars.STORYBOOK_PAGES_ENABLED == 'true'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Require a private Pages site
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          status=0
+          body="$(gh api "repos/${GITHUB_REPOSITORY}/pages")" || status=$?
+          if [ "$status" -ne 0 ]; then
+            echo "Refusing to publish. Could not read the Pages site (exit ${status})."
+            echo "Create it only with build_type=workflow and public=false, on GitHub Enterprise Cloud."
+            exit 1
+          fi
+          public="$(printf '%s' "$body" | jq -r '.public')"
+          if [ "$public" != "false" ]; then
+            echo "Refusing to publish. Pages public=${public}."
+            echo "Visibility must be private (public=false) before this job can deploy."
+            exit 1
+          fi
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -5,7 +5,7 @@ addons.setConfig({
   theme: create({
     base: "light",
     brandTitle: "ASAP UI",
-    brandImage: "/logo.png",
+    brandImage: "./logo.png",
     brandUrl: "https://www.serviceasap.com/",
     brandTarget: "_blank",
     colorPrimary: "#a60e13",

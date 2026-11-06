@@ -142,6 +142,14 @@ bun run test:visual    # Playwright scaffold; not part of CI
 
 `bun run emit:css` rewrites `src/styles.css` from the TypeScript tokens. Edit the tokens, then emit. Do not hand-edit the CSS file.
 
+## Storybook
+
+`bun run dev` serves the catalog on port 6006. That site is only on your machine.
+
+There is no hosted Storybook. `.github/workflows/storybook-pages.yml` builds `storybook-static` on every push to `main`, and the deploy job does not run unless the repository variable `STORYBOOK_PAGES_ENABLED` is `true`. Even then it publishes only when a Pages site already exists with `public` set to `false`. That private site is visible to people with read access to this repository, not to the internet. It requires an organization on GitHub Enterprise Cloud.
+
+`asap-security-software` is a GitHub user account, so that visibility cannot be turned on here. Leave the variable unset. Enabling Pages on this account would publish a public site, which is not approved.
+
 ## Release
 
 Pushing a `v*.*.*` tag runs `.github/workflows/release.yml`, which publishes to `https://npm.pkg.github.com` with `GITHUB_TOKEN`. Pull requests do not publish.

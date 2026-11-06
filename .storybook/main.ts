@@ -9,8 +9,8 @@ const config: StorybookConfig = {
     name: "@storybook/react-vite",
     options: {},
   },
-  async viteFinal(config) {
-    return mergeConfig(config, {
+  async viteFinal(config, { configType }) {
+    const merged = mergeConfig(config, {
       plugins: [tailwindcss()],
       // Vite 8 serves React's CJS entry without a default interop unless it is
       // prebundled. Storybook's dev server imports that default.
@@ -18,6 +18,14 @@ const config: StorybookConfig = {
         include: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
       },
     });
+    // Relative URLs load at the root of a private Pages host
+    // (https://<random>.pages.github.io/) and under a project subpath
+    // (https://<owner>.github.io/<repo>/). Storybook's Vite builder already
+    // defaults to this; keep it explicit so a later merge cannot pin `/`.
+    if (configType === "PRODUCTION") {
+      merged.base = "./";
+    }
+    return merged;
   },
 };
 

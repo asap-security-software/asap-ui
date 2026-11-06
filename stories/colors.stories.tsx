@@ -82,7 +82,7 @@ type Story = StoryObj<typeof meta>;
 export const Light: Story = {
   render: () => (
     <div className="max-w-content">
-      <img src="/logo.png" alt="ASAP Security" className="mb-4 h-7 w-auto" />
+      <img src="./logo.png" alt="ASAP Security" className="mb-4 h-7 w-auto" />
       <h1 className="text-asap-2xl font-semibold tracking-asap-tight text-ink">asap</h1>
       <p className="mt-1 mb-6 text-asap-sm text-muted">
         Light theme, on by default. Brand red, ink, and status colors are the public-site hexes.
