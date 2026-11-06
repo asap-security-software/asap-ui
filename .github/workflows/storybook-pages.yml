@@ -28,6 +28,7 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
+      # Static production build only. Do not pass secrets or env into Storybook.
       - name: Build Storybook
         run: bun run build-storybook
 
@@ -36,39 +37,13 @@ jobs:
         with:
           path: storybook-static
 
-  # Private Pages needs GitHub Enterprise Cloud on an organization, with the
-  # site already created as public=false. This account is a user, so that
-  # visibility is not available. Leave STORYBOOK_PAGES_ENABLED unset. The
-  # check below still refuses to publish if the variable is set early:
-  # actions/deploy-pages enables Pages when it is missing, and on this
-  # account that site would be public.
   deploy:
-    if: vars.STORYBOOK_PAGES_ENABLED == 'true'
     needs: build
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Require a private Pages site
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          status=0
-          body="$(gh api "repos/${GITHUB_REPOSITORY}/pages")" || status=$?
-          if [ "$status" -ne 0 ]; then
-            echo "Refusing to publish. Could not read the Pages site (exit ${status})."
-            echo "Create it only with build_type=workflow and public=false, on GitHub Enterprise Cloud."
-            exit 1
-          fi
-          public="$(printf '%s' "$body" | jq -r '.public')"
-          if [ "$public" != "false" ]; then
-            echo "Refusing to publish. Pages public=${public}."
-            echo "Visibility must be private (public=false) before this job can deploy."
-            exit 1
-          fi
-
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

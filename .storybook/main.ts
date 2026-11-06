@@ -18,10 +18,10 @@ const config: StorybookConfig = {
         include: ["react", "react-dom", "react/jsx-runtime", "react/jsx-dev-runtime"],
       },
     });
-    // Relative URLs load at the root of a private Pages host
-    // (https://<random>.pages.github.io/) and under a project subpath
-    // (https://<owner>.github.io/<repo>/). Storybook's Vite builder already
-    // defaults to this; keep it explicit so a later merge cannot pin `/`.
+    // Relative URLs load at the public project site
+    // (https://asap-security-software.github.io/asap-ui/). Storybook's Vite
+    // builder already defaults to this; keep it explicit so a later merge
+    // cannot pin `/` and drop the `/asap-ui/` prefix.
     if (configType === "PRODUCTION") {
       merged.base = "./";
     }

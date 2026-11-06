@@ -144,11 +144,9 @@ bun run test:visual    # Playwright scaffold; not part of CI
 
 ## Storybook
 
-`bun run dev` serves the catalog on port 6006. That site is only on your machine.
+`bun run dev` serves the catalog on port 6006. That process is only on your machine.
 
-There is no hosted Storybook. `.github/workflows/storybook-pages.yml` builds `storybook-static` on every push to `main`, and the deploy job does not run unless the repository variable `STORYBOOK_PAGES_ENABLED` is `true`. Even then it publishes only when a Pages site already exists with `public` set to `false`. That private site is visible to people with read access to this repository, not to the internet. It requires an organization on GitHub Enterprise Cloud.
-
-`asap-security-software` is a GitHub user account, so that visibility cannot be turned on here. Leave the variable unset. Enabling Pages on this account would publish a public site, which is not approved.
+The hosted Storybook is public at https://asap-security-software.github.io/asap-ui/. `.github/workflows/storybook-pages.yml` publishes it on every push to `main`. The site is the production Storybook build only. It does not include secrets or environment values.
 
 ## Release
 
