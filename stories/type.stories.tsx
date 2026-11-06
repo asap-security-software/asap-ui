@@ -26,7 +26,7 @@ export const Scale: Story = {
             <div className="w-16 shrink-0 text-asap-xs text-muted tabular-nums">{size}</div>
             <div className="w-12 shrink-0 text-asap-xs font-semibold text-muted">{name}</div>
             <div style={{ fontSize: size }} className="font-semibold tracking-asap-snug text-ink">
-              SO10482 — Memorial Hospital
+              SO-EXAMPLE — Example Hospital
             </div>
           </div>
         ))}
