@@ -33,7 +33,7 @@ export const TouchTargets: Story = {
   render: () => (
     <div className="flex w-[358px] flex-col gap-3">
       <article className="rounded-xl border border-border-soft bg-surface p-3.5">
-        <div className="text-asap-xs font-semibold text-primary">Memorial Hospital · Access</div>
+        <div className="text-asap-xs font-semibold text-primary">Example Hospital · Access</div>
         <h3 className="mt-1 text-asap-xl font-semibold tracking-asap-tight text-ink">
           Floor 3 — north wing readers
         </h3>
@@ -48,7 +48,7 @@ export const TouchTargets: Story = {
         </Button>
       </article>
       <article className="rounded-xl border border-border-soft bg-surface p-3.5">
-        <div className="text-asap-xs font-semibold text-primary">Memorial Hospital</div>
+        <div className="text-asap-xs font-semibold text-primary">Example Hospital</div>
         <h3 className="mt-1 text-asap-xl font-semibold tracking-asap-tight text-ink">
           Mount backboxes & power supplies
         </h3>

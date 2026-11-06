@@ -28,7 +28,7 @@ export const TaskDetail: Story = {
       </SheetTrigger>
       <SheetContent>
         <SheetHeader>
-          <div className="text-asap-xs font-semibold text-primary">Memorial Hospital · Access</div>
+          <div className="text-asap-xs font-semibold text-primary">Example Hospital · Access</div>
           <SheetTitle>Floor 3 — north wing readers</SheetTitle>
           <div className="mt-1 flex items-center gap-2.5">
             <StatusPill status="progress">In progress</StatusPill>

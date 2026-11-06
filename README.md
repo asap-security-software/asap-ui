@@ -142,6 +142,12 @@ bun run test:visual    # Playwright scaffold; not part of CI
 
 `bun run emit:css` rewrites `src/styles.css` from the TypeScript tokens. Edit the tokens, then emit. Do not hand-edit the CSS file.
 
+## Storybook
+
+`bun run dev` serves the catalog on port 6006. That process is only on your machine.
+
+The hosted Storybook is public at https://asap-security-software.github.io/asap-ui/. `.github/workflows/storybook-pages.yml` publishes it on every push to `main`. The site is the production Storybook build only. It does not include secrets or environment values.
+
 ## Release
 
 Pushing a `v*.*.*` tag runs `.github/workflows/release.yml`, which publishes to `https://npm.pkg.github.com` with `GITHUB_TOKEN`. Pull requests do not publish.

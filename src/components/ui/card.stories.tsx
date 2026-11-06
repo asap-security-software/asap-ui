@@ -15,7 +15,7 @@ export const Task: Story = {
   render: () => (
     <Card className="w-[360px]">
       <CardHeader>
-        <div className="text-asap-xs font-semibold text-primary">Memorial Hospital · Access</div>
+        <div className="text-asap-xs font-semibold text-primary">Example Hospital · Access</div>
         <CardTitle>Floor 3 — north wing readers</CardTitle>
         <div className="mt-1 flex items-center gap-2.5">
           <StatusPill status="progress">In progress</StatusPill>
