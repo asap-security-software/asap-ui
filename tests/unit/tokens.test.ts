@@ -130,6 +130,7 @@ describe("styles.css", () => {
       expect(source).toContain("--radius-md: var(--asap-radius-md)");
       expect(source).toContain(".asap-root");
       expect(source).toContain("prefers-reduced-motion");
+      expect(source).toContain("--animate-drawer-right");
     }
   });
 });

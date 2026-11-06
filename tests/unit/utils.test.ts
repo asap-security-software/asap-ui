@@ -13,4 +13,10 @@ describe("cn", () => {
   test("drops empty input", () => {
     expect(cn("rounded-md", undefined, null, "")).toBe("rounded-md");
   });
+
+  test("keeps a status color next to an asap font size", () => {
+    expect(cn("text-success-foreground", "text-asap-xs")).toBe(
+      "text-success-foreground text-asap-xs",
+    );
+  });
 });

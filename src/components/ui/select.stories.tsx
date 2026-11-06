@@ -11,6 +11,22 @@ type Story = StoryObj<typeof meta>;
 
 const dot = "inline-block size-2 shrink-0 rounded-full";
 
+export const Touch: Story = {
+  render: () => (
+    <div className="w-[360px]">
+      <Select defaultValue="progress">
+        <SelectTrigger size="touch" aria-label="Status">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="progress">In progress</SelectItem>
+          <SelectItem value="done">Done</SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  ),
+};
+
 export const Status: Story = {
   render: () => (
     <div className="w-[360px] rounded-xl border border-border bg-surface p-5">
