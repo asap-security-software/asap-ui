@@ -152,9 +152,11 @@ The hosted Storybook is public at https://asap-security-software.github.io/asap-
 
 Publishing is done by `.github/workflows/release.yml`, which runs on either:
 
-- a pushed `v*.*.*` tag (the tag must equal `v` plus the `package.json` version), or
-- a manual `workflow_dispatch` run on the default branch, which publishes the version currently in `package.json`.
+- a pushed `v*.*.*` tag (the tag must equal `v` plus the `package.json` version). It publishes only if the tagged commit is on `main`; otherwise the job fails. Or
+- a manual `workflow_dispatch` run on the default branch, which publishes the version currently in `package.json`, then creates and pushes the matching `vX.Y.Z` tag on the published commit (never forced, and only after the publish succeeds).
 
-The workflow installs, then runs typecheck, lint, unit tests and build, and only then runs `bun publish --access restricted` to `https://npm.pkg.github.com`. It authenticates with the built-in `GITHUB_TOKEN` (`packages: write`); no other secrets are used. The workflow never bumps versions or creates tags. Pull requests do not publish.
+Both paths fail early if that version is already on the registry. The dispatch path also fails early if the `vX.Y.Z` tag already exists on origin, so a dispatch and a tag push are mutually exclusive for a given version. A tag pushed with `GITHUB_TOKEN` does not trigger workflows, so the follow-up tag does not start a second publish.
+
+The workflow installs, then runs typecheck, lint, unit tests and build, and only then runs `bun publish --access restricted` to `https://npm.pkg.github.com`. It authenticates with the built-in `GITHUB_TOKEN` (job permissions `packages: write` and `contents: write`, the latter only for the dispatch tag push); no other secrets are used. The workflow never bumps versions. Pull requests do not publish.
 
 `v0.1.0` published `@asap-security-software/ui@0.1.0`. The first `0.2.0` publish happens only after this change is reviewed and merged to `main`; bump `package.json` first for any later release.
