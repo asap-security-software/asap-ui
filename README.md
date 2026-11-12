@@ -2,7 +2,7 @@
 
 Shared React component library for ASAP Security. ProjectView (Next.js on Bun) is the first consumer. Later apps reuse the same components and swap the palette.
 
-0.1.0 (tokens, Button, Badge, Select) is published to GitHub Packages from the `v0.1.0` tag. 0.2.0 adds the core components ProjectView needs. It is not published until a `v0.2.0` tag is pushed.
+0.1.0 is published from the `v0.1.0` tag. 0.2.0 adds the core components ProjectView needs. It is not published until the release workflow is run after review (see Release).
 
 ## Install
 
@@ -150,6 +150,13 @@ The hosted Storybook is public at https://asap-security-software.github.io/asap-
 
 ## Release
 
-Pushing a `v*.*.*` tag runs `.github/workflows/release.yml`, which publishes to `https://npm.pkg.github.com` with `GITHUB_TOKEN`. Pull requests do not publish.
+Publishing is done by `.github/workflows/release.yml`, which runs on either:
 
-`v0.1.0` published `@asap-security-software/ui@0.1.0`. Do not tag 0.2.0 from this branch.
+- a pushed `v*.*.*` tag (the tag must equal `v` plus the `package.json` version). It publishes only if the tagged commit is on `main`; otherwise the job fails. Or
+- a manual `workflow_dispatch` run on the default branch, which publishes the version currently in `package.json`, then creates and pushes the matching `vX.Y.Z` tag on the published commit (never forced, and only after the publish succeeds).
+
+Both paths fail early if that version is already on the registry. The dispatch path also fails early if the `vX.Y.Z` tag already exists on origin, so a dispatch and a tag push are mutually exclusive for a given version. A tag pushed with `GITHUB_TOKEN` does not trigger workflows, so the follow-up tag does not start a second publish.
+
+The workflow installs, then runs typecheck, lint, unit tests and build, and only then runs `bun publish --access restricted` to `https://npm.pkg.github.com`. It authenticates with the built-in `GITHUB_TOKEN`; no other secrets are used. The `publish` job, which runs dependency code, has only `contents: read` and `packages: write`. The tag is created by a separate `tag` job that needs `publish`, runs only on manual dispatch after the publish succeeds, and is the only job with `contents: write`. The workflow never bumps versions. Pull requests do not publish.
+
+`v0.1.0` and `v0.2.0` are both already published (`@asap-security-software/ui@0.2.0` was published by the Nov 6 Release run for tag `v0.2.0` at `ab30a80`). The next release needs a `package.json` version bump on `main` first; a dispatch at `0.2.0` stops at "already published".

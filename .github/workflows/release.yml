@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -12,8 +13,23 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    # Read-only contents: dependency code runs here, so the token cannot push.
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require the commit to be on main
+        run: |
+          git fetch origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "Commit $GITHUB_SHA is not on main; refusing to publish" >&2
+            exit 1
+          fi
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -22,12 +38,76 @@ jobs:
       - name: Install
         run: bun install --frozen-lockfile
 
+      - name: Check tag matches package.json version
+        if: github.ref_type == 'tag'
+        run: |
+          version="$(bun -p 'require("./package.json").version')"
+          if [ "${GITHUB_REF_NAME}" != "v${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json version v${version}" >&2
+            exit 1
+          fi
+
+      - name: Configure registry auth
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s\n' '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}' >> .npmrc
+
+      - name: Fail early if this version or its tag already exists
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version="$(bun -p 'require("./package.json").version')"
+          name="$(bun -p 'require("./package.json").name')"
+          # On a tag push the tag just arrived; only dispatch needs the tag check.
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ] \
+            && git ls-remote --exit-code --tags origin "refs/tags/v${version}" >/dev/null; then
+            echo "Tag v${version} already exists on origin" >&2
+            exit 1
+          fi
+          if out="$(npm view "${name}@${version}" version 2>&1)"; then
+            echo "${name}@${version} is already published" >&2
+            exit 1
+          fi
+          case "$out" in
+            *E404*) ;;
+            *) echo "Registry check failed: $out" >&2; exit 1 ;;
+          esac
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Unit tests
+        run: bun run test
+
       - name: Build
         run: bun run build
 
       - name: Publish to GitHub Packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bun publish --access restricted
+
+  # Separate job so only this one holds contents: write, and no dependency code
+  # runs in it. Runs only after a successful publish. A tag pushed with
+  # GITHUB_TOKEN does not trigger workflows, so this tag will not start a second
+  # publish.
+  tag:
+    needs: publish
+    if: github.event_name == 'workflow_dispatch' && needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Tag the published commit
         run: |
-          printf '%s\n' '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}' >> .npmrc
-          bun publish --access restricted
+          version="$(node -p 'require("./package.json").version')"
+          git tag "v${version}" "$GITHUB_SHA"
+          git push origin "refs/tags/v${version}"
