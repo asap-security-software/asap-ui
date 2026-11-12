@@ -97,7 +97,7 @@ jobs:
   # publish.
   tag:
     needs: publish
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch' && needs.publish.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
