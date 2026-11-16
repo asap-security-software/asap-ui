@@ -15,7 +15,7 @@ A consumer installs the package and can import from four entry points. The main 
 
 ## Driving it with verify.ts
 
-`V drive published-exports` calls `bun scripts/verify-dist.ts` (dist files, client boundary, publishConfig, exports map), resolves all four specifiers from the installed consumer, reads the installed package's own `package.json` and asserts every `exports[*].types` file exists in the installed package (string entries such as `./styles.css` and entries without `types` are skipped; no paths are hardcoded; `verify-dist.ts` only sees the repo `dist/`), and checks the installed entry/tokens directive. Evidence: `verify-dist.log`, `exports.json`.
+`V drive published-exports` calls `bun scripts/verify-dist.ts` (dist files, client boundary, publishConfig, exports map), resolves all four specifiers from the installed consumer, reads the installed package's own `package.json` and asserts every types file exists in the installed package: any `types` string at any depth inside `exports` condition objects (e.g. `exports["."].import.types`) plus the top-level `types` and `typings` fields, deduped (string entries such as `./styles.css` are skipped; none listed at all is a failure; no paths are hardcoded; `verify-dist.ts` only sees the repo `dist/`), and checks the installed entry/tokens directive. Evidence: `verify-dist.log`, `exports.json`.
 
 ## Gotchas
 

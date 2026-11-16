@@ -133,25 +133,36 @@ function assertPrimitives(markup: string): void {
   ]);
 }
 
-/** Every `exports[*].types` file named by the package's own package.json must exist in pkgDir.
- * String entries (./styles.css) and entries without `types` are skipped. */
+/** Collect every `types` string at any depth under `node` (condition objects), with its location. */
+function collectTypes(node: unknown, where: string, out: Map<string, string>): void {
+  if (typeof node !== "object" || node === null) return; // string entries (./styles.css) skipped
+  for (const [k, v] of Object.entries(node)) {
+    if (k === "types" && typeof v === "string") {
+      if (!out.has(v)) out.set(v, `${where}.types`);
+    } else collectTypes(v, `${where}["${k}"]`, out);
+  }
+}
+
+/** Every types file named by the package's own package.json must exist in pkgDir: `types` at any
+ * depth under `exports`, plus the top-level `types` and `typings` fields. Same path is checked once. */
 function assertPackedTypes(pkgDir: string): string[] {
   const manifest: unknown = JSON.parse(readFileSync(path.join(pkgDir, "package.json"), "utf8"));
-  const exportsMap: unknown =
-    typeof manifest === "object" && manifest ? Reflect.get(manifest, "exports") : null;
+  if (typeof manifest !== "object" || manifest === null)
+    throw new Error("installed package.json is not an object");
+  const exportsMap: unknown = Reflect.get(manifest, "exports");
   if (typeof exportsMap !== "object" || exportsMap === null)
     throw new Error("installed package.json has no exports map");
-  const checked: string[] = [];
-  for (const [key, entry] of Object.entries(exportsMap)) {
-    if (typeof entry !== "object" || entry === null) continue;
-    const types: unknown = Reflect.get(entry, "types");
-    if (typeof types !== "string") continue;
-    checked.push(types);
-    if (!existsSync(path.join(pkgDir, types)))
-      throw new Error(`installed package lacks types ${types} (exports["${key}"].types)`);
+  const found = new Map<string, string>();
+  collectTypes(exportsMap, "exports", found);
+  for (const field of ["types", "typings"]) {
+    const v: unknown = Reflect.get(manifest, field);
+    if (typeof v === "string" && !found.has(v)) found.set(v, field);
   }
-  if (checked.length === 0) throw new Error("installed package.json exports list no types files");
-  return checked;
+  if (found.size === 0) throw new Error("installed package.json lists no types files");
+  for (const [file, where] of found)
+    if (!existsSync(path.join(pkgDir, file)))
+      throw new Error(`installed package lacks types ${file} (${where})`);
+  return [...found.keys()];
 }
 
 async function launch(): Promise<Current> {
@@ -380,6 +391,49 @@ async function selfCheck(): Promise<void> {
     const tok = tmsg.includes(`lacks types ${listed}`);
     console.log(`${tok ? "ok  " : "BAD "} missing exports types file: "${tmsg}"`);
     if (!tok) failures.push("missing exports types");
+    // Variant packages: rewrite a manifest copy, make the file exist, prove it passes, delete it.
+    const manifestText = readFileSync(path.join(root, "package.json"), "utf8");
+    const variants: Array<[string, string, (m: Record<string, unknown>, f: string) => void]> = [
+      [
+        "nested-condition",
+        "exports.import.types",
+        (m, f) => {
+          m.exports = { ".": { import: { types: f, default: "./dist/index.js" } } };
+          delete m.types;
+          delete m.typings;
+        },
+      ],
+      [
+        "top-level",
+        "top-level types",
+        (m, f) => {
+          m.types = f;
+        },
+      ],
+    ];
+    for (const [name, label, mutate] of variants) {
+      const vdir = path.join(tmp, `${name}-pkg`);
+      mkdirSync(vdir);
+      cpSync(path.join(root, "dist"), path.join(vdir, "dist"), { recursive: true });
+      const extra = `./dist/${name}-extra.d.ts`;
+      writeFileSync(path.join(vdir, extra), "export {};\n");
+      const parsed: unknown = JSON.parse(manifestText);
+      if (typeof parsed !== "object" || parsed === null) throw new Error("bad package.json");
+      const m: Record<string, unknown> = { ...parsed };
+      mutate(m, extra);
+      writeFileSync(path.join(vdir, "package.json"), JSON.stringify(m));
+      assertPackedTypes(vdir); // control: must pass while the file exists
+      rmSync(path.join(vdir, extra));
+      let vmsg = "";
+      try {
+        assertPackedTypes(vdir);
+      } catch (e) {
+        vmsg = e instanceof Error ? e.message : String(e);
+      }
+      const vok = vmsg.includes(`lacks types ${extra}`);
+      console.log(`${vok ? "ok  " : "BAD "} missing ${label} file: "${vmsg}"`);
+      if (!vok) failures.push(`missing ${label}`);
+    }
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
