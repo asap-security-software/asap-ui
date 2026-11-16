@@ -106,6 +106,33 @@ async function renderTaskAction(consumer: string): Promise<string> {
   );
 }
 
+/** Offline: react, react-dom, tailwindcss, radix etc. come from this repo's node_modules. */
+function linkDeps(consumer: string): void {
+  for (const name of readdirSync(path.join(root, "node_modules"))) {
+    if (name.startsWith(".") || name === "@asap-security-software") continue;
+    symlinkSync(
+      path.join(root, "node_modules", name),
+      path.join(consumer, "node_modules", name),
+      "dir",
+    );
+  }
+}
+
+/** Primitive checks. The Button is matched on its own element: the StatusSelect combobox trigger
+ * is also a `<button type="button" class="w-full ...">`, so whole-markup needles prove nothing. */
+function assertPrimitives(markup: string): void {
+  const btn = markup.match(/<button(?![^>]*role="combobox")[^>]*>Mark done<\/button>/)?.[0];
+  if (!btn) throw new Error("Mark done Button not rendered");
+  assertMarkup(btn, ['type="button"', "min-h-touch", "w-full"]);
+  assertMarkup(markup, [
+    'data-slot="status-pill"',
+    "In progress",
+    "New",
+    'data-slot="badge"',
+    'data-slot="select-trigger"',
+  ]);
+}
+
 async function launch(): Promise<Current> {
   const existing = readCurrent();
   if (existing) {
@@ -131,15 +158,7 @@ async function launch(): Promise<Current> {
     const scope = path.join(consumer, "node_modules", "@asap-security-software");
     mkdirSync(scope, { recursive: true });
     renameSync(path.join(extract, "package"), path.join(scope, "ui"));
-    // Offline: react, react-dom, tailwindcss, radix etc. come from this repo's node_modules.
-    for (const name of readdirSync(path.join(root, "node_modules"))) {
-      if (name.startsWith(".") || name === "@asap-security-software") continue;
-      symlinkSync(
-        path.join(root, "node_modules", name),
-        path.join(consumer, "node_modules", name),
-        "dir",
-      );
-    }
+    linkDeps(consumer);
     writeFileSync(
       path.join(consumer, "package.json"),
       JSON.stringify({ name: "asap-ui-throwaway-consumer", private: true, type: "module" }),
@@ -181,6 +200,11 @@ async function drive(feature: string): Promise<void> {
     ev("verify-dist.log", must(["bun", "scripts/verify-dist.ts"]));
     const resolved = EXPORTS.map((s) => [s, Bun.resolveSync(s, c.consumer)]);
     ev("exports.json", JSON.stringify(resolved, null, 2));
+    // verify-dist.ts checks the repo's dist/; the types must also be in the installed tarball.
+    const pkgDir = path.join(c.consumer, "node_modules", PKG);
+    for (const f of ["dist/index.d.ts", "dist/tokens/index.d.ts", "dist/tailwind/preset.d.ts"]) {
+      if (!existsSync(path.join(pkgDir, f))) throw new Error(`installed package lacks ${f}`);
+    }
     const entry = readFileSync(resolved[0][1], "utf8").trimStart();
     if (!/^["']use client["']/.test(entry)) throw new Error("installed entry lacks use client");
     const tokens = readFileSync(resolved[1][1], "utf8").trimStart();
@@ -200,8 +224,7 @@ async function drive(feature: string): Promise<void> {
   } else if (feature === "render-primitives") {
     const markup = await renderTaskAction(c.consumer);
     ev("render-primitives.html", markup);
-    const needles = ["In progress", "Mark done", 'type="button"', "min-h-touch", "w-full", "New"];
-    assertMarkup(markup, [...needles, 'data-slot="status-pill"', 'data-slot="select-trigger"']);
+    assertPrimitives(markup);
   } else if (feature === "tokens-theme") {
     const t = await load(c.consumer, `${PKG}/tokens`);
     const harbor = t.defineTheme({
@@ -251,7 +274,7 @@ async function prove(feature = "render-primitives"): Promise<void> {
 }
 
 /** Prove the skill can fail: each broken input must be rejected with a non-zero exit. */
-function selfCheck(): void {
+async function selfCheck(): Promise<void> {
   if (!existsSync(path.join(root, "dist/index.js"))) throw new Error("build first: bun run build");
   const tmp = mkdtempSync(path.join(tmpdir(), "asap-ui-selfcheck-"));
   const failures: string[] = [];
@@ -297,6 +320,32 @@ function selfCheck(): void {
       sh(["bun", self, "check-markup", empty, "Mark done"]),
       "render output is empty",
     );
+    // Throwaway consumer under tmp whose Button defaults to submit; src/ and dist/ stay untouched.
+    const renderCopy = async (name: string, mutate: boolean) => {
+      const consumer = path.join(tmp, name);
+      const pkg = path.join(consumer, "node_modules", PKG);
+      mkdirSync(pkg, { recursive: true });
+      cpSync(path.join(root, "dist"), path.join(pkg, "dist"), { recursive: true });
+      cpSync(path.join(root, "package.json"), path.join(pkg, "package.json"));
+      linkDeps(consumer);
+      if (mutate) {
+        const before = readFileSync(path.join(pkg, "dist/index.js"), "utf8");
+        const after = before.replace(/\?\?\s*"button"/, '?? "submit"');
+        if (after === before) throw new Error("Button default not found in dist/index.js");
+        writeFileSync(path.join(pkg, "dist/index.js"), after);
+      }
+      return await renderTaskAction(consumer);
+    };
+    assertPrimitives(await renderCopy("button-ok", false));
+    let msg = "";
+    try {
+      assertPrimitives(await renderCopy("button-submit", true));
+    } catch (e) {
+      msg = e instanceof Error ? e.message : String(e);
+    }
+    const ok = msg.includes('type="button"');
+    console.log(`${ok ? "ok  " : "BAD "} mutation: Button defaults to submit: "${msg}"`);
+    if (!ok) failures.push("button submit mutation");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
@@ -316,7 +365,7 @@ try {
   else if (cmd === "drive" && arg) await drive(arg);
   else if (cmd === "cleanup") cleanup();
   else if (cmd === "prove") await prove(arg);
-  else if (cmd === "self-check") selfCheck();
+  else if (cmd === "self-check") await selfCheck();
   else if (cmd === "check-markup" && arg) assertMarkup(readFileSync(arg, "utf8"), rest);
   else
     throw new Error(

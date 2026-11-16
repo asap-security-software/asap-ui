@@ -15,10 +15,10 @@ Consumers render `Button`, `Badge`, `StatusPill` and `StatusSelect` from the mai
 
 ## Driving it with verify.ts
 
-`V drive render-primitives` renders the TaskAction tree with the consumer's `react-dom/server` `renderToStaticMarkup` and asserts the texts "In progress", "Mark done", "New", `type="button"`, `min-h-touch`, `w-full`, and the `data-slot` handles. Evidence: `render-primitives.html`.
+`V drive render-primitives` renders the TaskAction tree with the consumer's `react-dom/server` `renderToStaticMarkup`. It extracts the "Mark done" `<button>` element (excluding the `role="combobox"` StatusSelect trigger, which also has `type="button"` and `w-full`) and asserts `type="button"`, `min-h-touch`, `w-full` on that element only. It also asserts the StatusPill text and `data-slot`, Badge "New", and the `select-trigger` handle. Evidence: `render-primitives.html`. `self-check` re-renders from a /tmp copy whose Button defaults to `submit` and requires the missing `type="button"` failure.
 
 ## Gotchas
 
-- Static markup of `StatusSelect` is only the closed trigger: Radix Select renders no selected label or options on the server, so its value text and `allowed` filtering are not verified here.
+- Static markup of `StatusSelect` is only the closed trigger: the `select-value` label is client-only under `renderToStaticMarkup` (empty span), so "In progress" proves StatusPill, not StatusSelect. Its value text and `allowed` filtering are not verified here.
 - Classes are checked as strings; whether they have CSS is the `consumer-styles` feature.
 - No interaction (clicks, menus) is exercised.
