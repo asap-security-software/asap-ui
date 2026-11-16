@@ -1,0 +1,328 @@
+#!/usr/bin/env bun
+// Verification helper for @asap-security-software/ui. Dependency-free (node + bun builtins only).
+// Usage: bun .cursor/skills/verify-asap-ui/scripts/verify.ts <cmd>   (run from the repo root)
+//   launch | doctor | drive <feature> | cleanup | prove [feature] | self-check
+import { createHash } from "node:crypto";
+import {
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const self = fileURLToPath(import.meta.url);
+const root = path.resolve(path.dirname(self), "../../../..");
+const runsDir = path.join(root, ".cursor/skills/verify-asap-ui/runs");
+const currentFile = path.join(runsDir, "CURRENT");
+const PKG = "@asap-security-software/ui";
+const EXPORTS = [PKG, `${PKG}/tokens`, `${PKG}/tailwind-preset`, `${PKG}/styles.css`];
+const BRAND = ["#a60e13", "#212121", "#3dc372", "#ff9e45", "#e44e56"];
+const FEATURES = ["published-exports", "consumer-styles", "render-primitives", "tokens-theme"];
+
+type Current = { id: string; runDir: string; consumer: string; smoke: string; smokeSha256: string };
+
+function sh(cmd: string[], cwd = root): { code: number; out: string } {
+  const r = Bun.spawnSync(cmd, { cwd, stdout: "pipe", stderr: "pipe" });
+  return { code: r.exitCode, out: `${r.stdout.toString()}${r.stderr.toString()}` };
+}
+
+function must(cmd: string[], cwd = root, logTo?: string): string {
+  const r = sh(cmd, cwd);
+  if (logTo) writeFileSync(logTo, r.out);
+  if (r.code !== 0) throw new Error(`${cmd.join(" ")} exited ${r.code}\n${r.out}`);
+  return r.out;
+}
+
+function readCurrent(): Current | null {
+  if (!existsSync(currentFile)) return null;
+  const v: unknown = JSON.parse(readFileSync(currentFile, "utf8"));
+  if (typeof v !== "object" || v === null) throw new Error("CURRENT is not an object");
+  const g = (k: string): string => {
+    const x: unknown = Reflect.get(v, k);
+    if (typeof x !== "string" || x === "") throw new Error(`CURRENT is missing ${k}`);
+    return x;
+  };
+  return {
+    id: g("id"),
+    runDir: g("runDir"),
+    consumer: g("consumer"),
+    smoke: g("smoke"),
+    smokeSha256: g("smokeSha256"),
+  };
+}
+
+function needCurrent(): Current {
+  const c = readCurrent();
+  if (!c) throw new Error("no runs/CURRENT: run `launch` first");
+  if (!existsSync(c.consumer)) throw new Error(`consumer ${c.consumer} is gone: run cleanup`);
+  return c;
+}
+
+const sha = (s: string) => createHash("sha256").update(s).digest("hex");
+
+/** Throws on empty markup or any missing needle. Used by drive, check-markup and self-check. */
+function assertMarkup(markup: string, needles: string[]): void {
+  if (markup.trim() === "") throw new Error("render output is empty");
+  const missing = needles.filter((n) => !markup.includes(n));
+  if (missing.length > 0) throw new Error(`markup is missing: ${missing.join(" | ")}`);
+}
+
+/** Load a module the way the consumer would: resolved from the consumer dir, never src/. */
+async function load(consumer: string, spec: string) {
+  return await import(Bun.resolveSync(spec, consumer));
+}
+
+async function renderTaskAction(consumer: string): Promise<string> {
+  const { createElement: h } = await load(consumer, "react");
+  const { renderToStaticMarkup } = await load(consumer, "react-dom/server");
+  const ui = await load(consumer, PKG);
+  const options = [
+    { value: "progress", label: "In progress", tone: "progress" },
+    { value: "done", label: "Done", tone: "done" },
+  ];
+  return renderToStaticMarkup(
+    h(
+      "div",
+      null,
+      h(ui.StatusPill, { status: "progress" }, "In progress"),
+      h(ui.StatusSelect, {
+        value: "progress",
+        options,
+        allowed: ["done"],
+        onValueChange: () => {},
+      }),
+      h(ui.Button, { size: "touch", className: "w-full" }, "Mark done"),
+      h(ui.Badge, null, "New"),
+    ),
+  );
+}
+
+async function launch(): Promise<Current> {
+  const existing = readCurrent();
+  if (existing) {
+    if (existsSync(existing.consumer)) {
+      throw new Error(`active run ${existing.id} at ${existing.consumer}: run cleanup first`);
+    }
+    rmSync(currentFile); // stale: its scratch dir is already gone
+  }
+  const id = String(Date.now());
+  const runDir = path.join(runsDir, id);
+  const evidence = path.join(runDir, "evidence");
+  mkdirSync(evidence, { recursive: true });
+  const consumer = mkdtempSync(path.join(tmpdir(), `asap-ui-verify-${id}-`));
+  try {
+    must(["bun", "run", "build"], root, path.join(evidence, "build.log")); // runs verify-dist.ts
+    const packOut = must(["bun", "pm", "pack", "--destination", consumer], root);
+    writeFileSync(path.join(evidence, "pack.log"), packOut);
+    const tgz = readdirSync(consumer).find((f) => f.endsWith(".tgz"));
+    if (!tgz) throw new Error("bun pm pack produced no .tgz");
+    const extract = path.join(consumer, "extract");
+    mkdirSync(extract);
+    must(["tar", "-xzf", path.join(consumer, tgz), "-C", extract], root);
+    const scope = path.join(consumer, "node_modules", "@asap-security-software");
+    mkdirSync(scope, { recursive: true });
+    renameSync(path.join(extract, "package"), path.join(scope, "ui"));
+    // Offline: react, react-dom, tailwindcss, radix etc. come from this repo's node_modules.
+    for (const name of readdirSync(path.join(root, "node_modules"))) {
+      if (name.startsWith(".") || name === "@asap-security-software") continue;
+      symlinkSync(
+        path.join(root, "node_modules", name),
+        path.join(consumer, "node_modules", name),
+        "dir",
+      );
+    }
+    writeFileSync(
+      path.join(consumer, "package.json"),
+      JSON.stringify({ name: "asap-ui-throwaway-consumer", private: true, type: "module" }),
+    );
+    writeFileSync(path.join(evidence, "install.log"), `extracted ${tgz} into ${scope}/ui\n`);
+    for (const spec of EXPORTS) Bun.resolveSync(spec, consumer);
+    const markup = await renderTaskAction(consumer);
+    assertMarkup(markup, ["In progress", "Mark done"]);
+    const smoke = path.join(evidence, "smoke.html");
+    writeFileSync(smoke, markup);
+    const cur: Current = { id, runDir, consumer, smoke, smokeSha256: sha(markup) };
+    writeFileSync(currentFile, JSON.stringify(cur, null, 2));
+    console.log(`READY run=${id} consumer=${consumer} evidence=${evidence}`);
+    return cur;
+  } catch (e) {
+    rmSync(consumer, { recursive: true, force: true }); // evidence in runDir is kept
+    throw e;
+  }
+}
+
+function doctor(): Current {
+  const c = needCurrent();
+  for (const spec of EXPORTS) {
+    const p = Bun.resolveSync(spec, c.consumer);
+    if (!p.startsWith(c.consumer)) throw new Error(`${spec} resolved outside consumer: ${p}`);
+  }
+  const html = readFileSync(c.smoke, "utf8");
+  if (html.trim() === "" || sha(html) !== c.smokeSha256) throw new Error("smoke render changed");
+  must(["bun", "scripts/verify-dist.ts"]);
+  console.log(`DOCTOR OK run=${c.id}`);
+  return c;
+}
+
+async function drive(feature: string): Promise<void> {
+  const c = needCurrent();
+  const ev = (name: string, body: string) =>
+    writeFileSync(path.join(c.runDir, "evidence", name), body);
+  if (feature === "published-exports") {
+    ev("verify-dist.log", must(["bun", "scripts/verify-dist.ts"]));
+    const resolved = EXPORTS.map((s) => [s, Bun.resolveSync(s, c.consumer)]);
+    ev("exports.json", JSON.stringify(resolved, null, 2));
+    const entry = readFileSync(resolved[0][1], "utf8").trimStart();
+    if (!/^["']use client["']/.test(entry)) throw new Error("installed entry lacks use client");
+    const tokens = readFileSync(resolved[1][1], "utf8").trimStart();
+    if (/^["']use client["']/.test(tokens)) throw new Error("installed tokens has use client");
+  } else if (feature === "consumer-styles") {
+    ev("verify-consumer.log", must(["bun", "scripts/verify-consumer.ts"]));
+    const css = readFileSync(Bun.resolveSync(`${PKG}/styles.css`, c.consumer), "utf8");
+    if (!css.includes('@source "./index.js"'))
+      throw new Error("installed styles.css lacks @source");
+    ev(
+      "styles-source.txt",
+      css
+        .split("\n")
+        .filter((l) => l.includes("@source"))
+        .join("\n"),
+    );
+  } else if (feature === "render-primitives") {
+    const markup = await renderTaskAction(c.consumer);
+    ev("render-primitives.html", markup);
+    const needles = ["In progress", "Mark done", 'type="button"', "min-h-touch", "w-full", "New"];
+    assertMarkup(markup, [...needles, 'data-slot="status-pill"', 'data-slot="select-trigger"']);
+  } else if (feature === "tokens-theme") {
+    const t = await load(c.consumer, `${PKG}/tokens`);
+    const harbor = t.defineTheme({
+      name: "harbor",
+      colors: { primary: "#0b3d91", primaryHover: "#082f73" },
+    });
+    const base = t.themeToCss(t.asap);
+    const css = t.themeToCss(harbor);
+    ev("theme-asap.css", base);
+    ev("theme-harbor.css", css);
+    assertMarkup(base, BRAND);
+    assertMarkup(css, ['[data-asap-theme="harbor"]', "#0b3d91", "#082f73"]);
+  } else {
+    throw new Error(`unknown feature ${feature}; one of ${FEATURES.join(", ")}`);
+  }
+  console.log(`DRIVE OK ${feature} -> ${path.join(c.runDir, "evidence")}`);
+}
+
+function cleanup(): void {
+  const c = readCurrent();
+  if (!c) {
+    console.log("nothing to clean");
+    return;
+  }
+  const base = path.basename(c.consumer);
+  if (path.dirname(c.consumer) !== tmpdir() || !base.startsWith(`asap-ui-verify-${c.id}-`)) {
+    throw new Error(`refusing to delete ${c.consumer}: not a consumer this skill created`);
+  }
+  rmSync(c.consumer, { recursive: true, force: true });
+  rmSync(currentFile);
+  console.log(`CLEANED run=${c.id}; evidence kept at ${path.join(c.runDir, "evidence")}`);
+}
+
+async function prove(feature = "render-primitives"): Promise<void> {
+  if (readCurrent()) throw new Error("an active run exists; prove only cleans runs it started");
+  const c = await launch();
+  try {
+    doctor();
+    await drive(feature);
+  } finally {
+    cleanup();
+  }
+  const kept = readdirSync(path.join(c.runDir, "evidence"));
+  if (!kept.includes("smoke.html") || existsSync(c.consumer))
+    throw new Error("cleanup check failed");
+  console.log(`PROVE OK feature=${feature} evidence=${kept.join(",")}`);
+}
+
+/** Prove the skill can fail: each broken input must be rejected with a non-zero exit. */
+function selfCheck(): void {
+  if (!existsSync(path.join(root, "dist/index.js"))) throw new Error("build first: bun run build");
+  const tmp = mkdtempSync(path.join(tmpdir(), "asap-ui-selfcheck-"));
+  const failures: string[] = [];
+  const copy = (name: string) => {
+    const d = path.join(tmp, name);
+    mkdirSync(d);
+    cpSync(path.join(root, "dist"), path.join(d, "dist"), { recursive: true });
+    cpSync(path.join(root, "scripts"), path.join(d, "scripts"), { recursive: true });
+    cpSync(path.join(root, "package.json"), path.join(d, "package.json"));
+    symlinkSync(path.join(root, "node_modules"), path.join(d, "node_modules"), "dir");
+    return d;
+  };
+  const expectFail = (label: string, r: { code: number; out: string }, want: string) => {
+    const ok = r.code !== 0 && r.out.includes(want);
+    console.log(`${ok ? "ok  " : "BAD "} ${label}: exit ${r.code}, expects "${want}"`);
+    if (!ok) failures.push(label);
+  };
+  const dist = (d: string) => sh(["bun", "scripts/verify-dist.ts"], d);
+  const edit = (d: string, f: string, fn: (s: string) => string) => {
+    const p = path.join(d, f);
+    writeFileSync(p, fn(readFileSync(p, "utf8")));
+  };
+  try {
+    const base = dist(copy("baseline"));
+    console.log(`${base.code === 0 ? "ok  " : "BAD "} unmutated copy passes: exit ${base.code}`);
+    if (base.code !== 0) failures.push("baseline");
+    let d = copy("no-use-client");
+    edit(d, "dist/index.js", (s) => s.replace(/^\s*["']use client["'];?/, ""));
+    expectFail("build missing use client", dist(d), "use client");
+    d = copy("empty-css");
+    writeFileSync(path.join(d, "dist/styles.css"), "");
+    expectFail("mutation: empty styles.css", dist(d), "dist/styles.css is missing");
+    d = copy("no-entry");
+    rmSync(path.join(d, "dist/index.js"));
+    expectFail("missing dist/index.js", dist(d), "Missing build output");
+    d = copy("no-red");
+    edit(d, "dist/styles.css", (s) => s.replaceAll("#a60e13", "#000000"));
+    expectFail("mutation: brand red removed", dist(d), "#a60e13");
+    const empty = path.join(tmp, "empty.html");
+    writeFileSync(empty, "");
+    expectFail(
+      "empty render",
+      sh(["bun", self, "check-markup", empty, "Mark done"]),
+      "render output is empty",
+    );
+  } finally {
+    rmSync(tmp, { recursive: true, force: true });
+  }
+  const real = dist(root);
+  console.log(
+    `${real.code === 0 ? "ok  " : "BAD "} real worktree dist still passes: exit ${real.code}`,
+  );
+  if (real.code !== 0) failures.push("real worktree");
+  if (failures.length > 0) throw new Error(`self-check failed: ${failures.join(", ")}`);
+  console.log("SELF-CHECK OK: every broken input was rejected");
+}
+
+try {
+  const [cmd, arg, ...rest] = process.argv.slice(2);
+  if (cmd === "launch") await launch();
+  else if (cmd === "doctor") doctor();
+  else if (cmd === "drive" && arg) await drive(arg);
+  else if (cmd === "cleanup") cleanup();
+  else if (cmd === "prove") await prove(arg);
+  else if (cmd === "self-check") selfCheck();
+  else if (cmd === "check-markup" && arg) assertMarkup(readFileSync(arg, "utf8"), rest);
+  else
+    throw new Error(
+      "usage: launch | doctor | drive <feature> | cleanup | prove [feature] | self-check",
+    );
+} catch (e) {
+  console.error(`FAIL: ${e instanceof Error ? e.message : String(e)}`);
+  process.exit(1);
+}
