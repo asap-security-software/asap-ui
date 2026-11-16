@@ -12,3 +12,4 @@ coverage
 .DS_Store
 *.tsbuildinfo
 .playwright
+.cursor/skills/**/runs/
