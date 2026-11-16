@@ -2,7 +2,7 @@
 
 Shared React component library for ASAP Security. ProjectView (Next.js on Bun) is the first consumer. Later apps reuse the same components and swap the palette.
 
-0.1.0 is published from the `v0.1.0` tag. 0.2.0 adds the core components ProjectView needs. It is not published until the release workflow is run after review (see Release).
+0.1.0 and 0.2.0 are both published (tags `v0.1.0` and `v0.2.0`). 0.2.0 adds the core components ProjectView needs. The next release needs a `package.json` version bump on `main` first (see Release).
 
 ## Install
 
