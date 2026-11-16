@@ -33,7 +33,7 @@ Everything goes to `.cursor/skills/verify-asap-ui/runs/<id>/evidence/` (gitignor
 ## Helpers
 
 - `V prove [feature]` — launch, doctor, drive (default `render-primitives`), cleanup, then confirms evidence survived. Refuses if CURRENT already exists; only cleans a run it started.
-- `V self-check` — proves the skill can fail. In a `$TMPDIR` copy (repo untouched) it rejects: missing `use client`, emptied `dist/styles.css`, missing `dist/index.js`, brand red stripped from styles, and an empty render; then re-checks the real tree. Needs a prior `bun run build`; leaves no CURRENT, consumer or temp dir.
+- `V self-check` — proves the skill can fail. In a `$TMPDIR` copy (repo untouched) it rejects: missing `use client`, emptied `dist/styles.css`, missing `dist/index.js`, brand red stripped from styles, an empty render, a Button defaulting to submit, and a types file listed in `exports[*].types` but missing from the package; then re-checks the real tree. Needs a prior `bun run build`; leaves no CURRENT, consumer or temp dir.
 - `V check-markup <file> [needle...]` — internal: exits non-zero if the file is empty or lacks a needle.
 
 Script is executable (`chmod +x`), dependency-free, no Playwright/Chrome.

@@ -133,6 +133,27 @@ function assertPrimitives(markup: string): void {
   ]);
 }
 
+/** Every `exports[*].types` file named by the package's own package.json must exist in pkgDir.
+ * String entries (./styles.css) and entries without `types` are skipped. */
+function assertPackedTypes(pkgDir: string): string[] {
+  const manifest: unknown = JSON.parse(readFileSync(path.join(pkgDir, "package.json"), "utf8"));
+  const exportsMap: unknown =
+    typeof manifest === "object" && manifest ? Reflect.get(manifest, "exports") : null;
+  if (typeof exportsMap !== "object" || exportsMap === null)
+    throw new Error("installed package.json has no exports map");
+  const checked: string[] = [];
+  for (const [key, entry] of Object.entries(exportsMap)) {
+    if (typeof entry !== "object" || entry === null) continue;
+    const types: unknown = Reflect.get(entry, "types");
+    if (typeof types !== "string") continue;
+    checked.push(types);
+    if (!existsSync(path.join(pkgDir, types)))
+      throw new Error(`installed package lacks types ${types} (exports["${key}"].types)`);
+  }
+  if (checked.length === 0) throw new Error("installed package.json exports list no types files");
+  return checked;
+}
+
 async function launch(): Promise<Current> {
   const existing = readCurrent();
   if (existing) {
@@ -201,10 +222,7 @@ async function drive(feature: string): Promise<void> {
     const resolved = EXPORTS.map((s) => [s, Bun.resolveSync(s, c.consumer)]);
     ev("exports.json", JSON.stringify(resolved, null, 2));
     // verify-dist.ts checks the repo's dist/; the types must also be in the installed tarball.
-    const pkgDir = path.join(c.consumer, "node_modules", PKG);
-    for (const f of ["dist/index.d.ts", "dist/tokens/index.d.ts", "dist/tailwind/preset.d.ts"]) {
-      if (!existsSync(path.join(pkgDir, f))) throw new Error(`installed package lacks ${f}`);
-    }
+    assertPackedTypes(path.join(c.consumer, "node_modules", PKG));
     const entry = readFileSync(resolved[0][1], "utf8").trimStart();
     if (!/^["']use client["']/.test(entry)) throw new Error("installed entry lacks use client");
     const tokens = readFileSync(resolved[1][1], "utf8").trimStart();
@@ -346,6 +364,22 @@ async function selfCheck(): Promise<void> {
     const ok = msg.includes('type="button"');
     console.log(`${ok ? "ok  " : "BAD "} mutation: Button defaults to submit: "${msg}"`);
     if (!ok) failures.push("button submit mutation");
+    // Packed package whose exports map lists a types file that is absent.
+    const typesPkg = path.join(tmp, "types-pkg");
+    mkdirSync(typesPkg);
+    cpSync(path.join(root, "dist"), path.join(typesPkg, "dist"), { recursive: true });
+    cpSync(path.join(root, "package.json"), path.join(typesPkg, "package.json"));
+    const listed = assertPackedTypes(typesPkg)[0];
+    rmSync(path.join(typesPkg, listed));
+    let tmsg = "";
+    try {
+      assertPackedTypes(typesPkg);
+    } catch (e) {
+      tmsg = e instanceof Error ? e.message : String(e);
+    }
+    const tok = tmsg.includes(`lacks types ${listed}`);
+    console.log(`${tok ? "ok  " : "BAD "} missing exports types file: "${tmsg}"`);
+    if (!tok) failures.push("missing exports types");
   } finally {
     rmSync(tmp, { recursive: true, force: true });
   }
