@@ -724,6 +724,11 @@ async function selfCheck(): Promise<void> {
         'form step "synthesized Space on checkbox": checkbox.aria-checked is "true", expected "false"',
         props("checkbox", "onKeyDown: (e) => { if (e.key === ' ') e.preventDefault(); }"),
       ],
+      [
+        "Switch Space keydown preventDefault",
+        'form step "synthesized Space on switch": switch.aria-checked is "true", expected "false"',
+        props("switch", "onKeyDown: (e) => { if (e.key === ' ') e.preventDefault(); }"),
+      ],
     ];
     for (const [label, want, mutate] of formCases) {
       let fmsg = "";

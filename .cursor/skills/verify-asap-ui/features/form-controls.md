@@ -18,7 +18,7 @@ Consumers render `Input`, `Checkbox` and `Switch` from the main entry, usually a
 
 After every step it asserts with `===` the Input value and type, `role`, `aria-checked`, `data-state` and the accessible name (`label[for]` text) of all three controls, and that `document.activeElement` is the control just driven. Space is synthesized: the driver dispatches keydown+keyup, then calls `click()` only if neither event was cancelled. This proves the click path, focus, and that cancellation is honored; it does not prove native Space-to-click in a real browser. Evidence: `form-controls-client.json` (every step's state and the controls' outerHTML).
 
-`self-check` re-runs the same journey against throwaway consumers whose `dist/index.js` is mutated, and requires a non-zero failure with a distinctive message for: a missing control, a removed touch class (Input, Checkbox, Switch), a wrong Input value, a leftover first value when the second is required, a Checkbox or Switch that never toggles, a Checkbox with the wrong role, focus lost after a Switch click, and a Checkbox whose Space keydown calls `preventDefault` (eleven rejects in all).
+`self-check` re-runs the same journey against throwaway consumers whose `dist/index.js` is mutated, and requires a non-zero failure with a distinctive message for: a missing control, a removed touch class (Input, Checkbox, Switch), a wrong Input value, a leftover first value when the second is required, a Checkbox or Switch that never toggles, a Checkbox with the wrong role, focus lost after a Switch click, a Checkbox whose Space keydown calls `preventDefault`, and a Switch whose Space keydown calls `preventDefault` (twelve rejects in all).
 
 ## Gotchas
 
