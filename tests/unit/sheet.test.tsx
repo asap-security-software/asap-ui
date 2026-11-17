@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   Sheet,
@@ -60,5 +60,21 @@ describe("Sheet", () => {
     expect(dialog.getAttribute("data-side")).toBe("top");
     expect(dialog.className).toContain("animate-drawer-top");
     expect(document.querySelector("[data-slot=sheet-handle]")).toBeNull();
+  });
+
+  test("Escape closes the sheet and returns focus to the trigger", async () => {
+    const user = userEvent.setup();
+    render(<Example />);
+    const trigger = screen.getByRole("button", { name: "Open task" });
+    expect(document.activeElement).toBe(document.body);
+
+    await user.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "North wing readers" });
+    expect(document.activeElement).toBe(within(dialog).getByRole("button", { name: "Close" }));
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText("North wing readers")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 });
