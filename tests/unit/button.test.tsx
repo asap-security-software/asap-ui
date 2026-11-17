@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { Button } from "../../src/components/ui/button";
@@ -21,5 +23,29 @@ describe("Button", () => {
     );
     expect(markup).toContain('href="/jobs"');
     expect(markup).not.toContain("type=");
+  });
+
+  test("a disabled Button ignores clicks and stays a type=button disabled button", async () => {
+    const user = userEvent.setup();
+    let clicks = 0;
+    render(
+      createElement(
+        Button,
+        {
+          disabled: true,
+          onClick: () => {
+            clicks += 1;
+          },
+        },
+        "Start",
+      ),
+    );
+
+    const button = screen.getByRole("button", { name: "Start" });
+    await user.click(button);
+
+    expect(clicks).toBe(0);
+    expect(button).toHaveProperty("disabled", true);
+    expect(button.getAttribute("type")).toBe("button");
   });
 });
