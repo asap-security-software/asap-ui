@@ -843,19 +843,24 @@ async function clientPopovers(consumer: string, evidenceFile: string): Promise<v
       focus: T.tip,
     };
     const log: Array<[string, Snap]> = [];
-    const check = (step: string, expected: Snap, el: Element | null) => {
+    const check = (
+      kind: "popover" | "tooltip",
+      step: string,
+      expected: Snap,
+      el: Element | null,
+    ) => {
       const actual = snap();
-      const kind =
-        step.startsWith("Tab to the tooltip") || step.startsWith("Escape hides")
-          ? "tooltip"
-          : "popover";
+      const wrongFocus = () =>
+        new Error(
+          `${kind} step "${step}": focus is on "${who(document.activeElement)}", expected "${who(el)}"`,
+        );
+      // Focus identity first, so a wrong element is reported as a focus failure, not a side effect.
+      // A missing expected element (popover never rendered) is reported by the field checks instead.
+      if (el && document.activeElement !== el) throw wrongFocus();
       for (const [k, want] of Object.entries(expected))
         if (actual[k] !== want)
           throw new Error(`${kind} step "${step}": ${k} is "${actual[k]}", expected "${want}"`);
-      if (document.activeElement !== el)
-        throw new Error(
-          `${kind} step "${step}": focus is on "${who(document.activeElement)}", expected "${who(el)}"`,
-        );
+      if (document.activeElement !== el) throw wrongFocus();
       log.push([step, actual]);
     };
     const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 30))));
@@ -873,24 +878,25 @@ async function clientPopovers(consumer: string, evidenceFile: string): Promise<v
       });
       await settle();
     };
-    check("initial", closed, document.body);
+    check("popover", "initial", closed, document.body);
     await press("Tab");
-    check("Tab into the popover trigger", { ...closed, focus: T.pop }, pop);
+    check("popover", "Tab into the popover trigger", { ...closed, focus: T.pop }, pop);
     await act(async () => pop.click());
     await settle();
-    check("Click opens", popOpen, popContent()[0]?.querySelector("button") ?? null);
+    check("popover", "Click opens", popOpen, popContent()[0]?.querySelector("button") ?? null);
     await press("Tab");
     check(
+      "popover",
       "Tab stays on the confirm button",
       popOpen,
       popContent()[0]?.querySelector("button") ?? null,
     );
     await press("Escape");
-    check("Escape closes", { ...closed, focus: T.pop }, pop);
+    check("popover", "Escape closes", { ...closed, focus: T.pop }, pop);
     await press("Tab");
-    check("Tab to the tooltip trigger shows it", tipShown, tip);
+    check("tooltip", "Tab to the tooltip trigger shows it", tipShown, tip);
     await press("Escape");
-    check("Escape hides the tooltip", { ...closed, focus: T.tip }, tip);
+    check("tooltip", "Escape hides the tooltip", { ...closed, focus: T.tip }, tip);
     if (evidenceFile) writeFileSync(evidenceFile, JSON.stringify(log, null, 2));
     await act(async () => app.unmount());
     console.log(POPOVERS_OK);
@@ -1459,7 +1465,7 @@ async function selfCheck(): Promise<void> {
       ],
       [
         "popover not closed by Escape",
-        'popover step "Escape closes": popover.expanded is "true", expected "false"',
+        'popover step "Escape closes": focus is on "Confirm slot", expected "Open schedule"',
         props("popover-content", "onEscapeKeyDown: (e) => e.preventDefault()"),
       ],
       [
@@ -1473,13 +1479,12 @@ async function selfCheck(): Promise<void> {
       ],
       [
         "popover focus not returned to trigger",
-        'popover step "Escape closes": focus is "BODY", expected "Open schedule"',
+        'popover step "Escape closes": focus is on "BODY", expected "Open schedule"',
         props("popover-content", stay),
       ],
       [
         "popover focus returned to the wrong element (Tooltip trigger)",
-        // Focusing the Tooltip trigger also shows its tooltip, which is what the journey sees first.
-        'popover step "Escape closes": tooltip.count is "1", expected "0"',
+        'popover step "Escape closes": focus is on "Due date", expected "Open schedule"',
         props(
           "popover-content",
           'onCloseAutoFocus: (e) => { e.preventDefault(); document.getElementById("tip-trigger")?.focus(); }',
