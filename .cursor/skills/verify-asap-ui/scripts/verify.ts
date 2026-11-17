@@ -35,6 +35,7 @@ const FEATURES = [
   "overlays",
   "menus",
   "popovers",
+  "tabs-table",
 ];
 
 type Current = { id: string; runDir: string; consumer: string; smoke: string; smokeSha256: string };
@@ -843,19 +844,24 @@ async function clientPopovers(consumer: string, evidenceFile: string): Promise<v
       focus: T.tip,
     };
     const log: Array<[string, Snap]> = [];
-    const check = (step: string, expected: Snap, el: Element | null) => {
+    const check = (
+      kind: "popover" | "tooltip",
+      step: string,
+      expected: Snap,
+      el: Element | null,
+    ) => {
       const actual = snap();
-      const kind =
-        step.startsWith("Tab to the tooltip") || step.startsWith("Escape hides")
-          ? "tooltip"
-          : "popover";
+      const wrongFocus = () =>
+        new Error(
+          `${kind} step "${step}": focus is on "${who(document.activeElement)}", expected "${who(el)}"`,
+        );
+      // Focus identity first, so a wrong element is reported as a focus failure, not a side effect.
+      // A missing expected element (popover never rendered) is reported by the field checks instead.
+      if (el && document.activeElement !== el) throw wrongFocus();
       for (const [k, want] of Object.entries(expected))
         if (actual[k] !== want)
           throw new Error(`${kind} step "${step}": ${k} is "${actual[k]}", expected "${want}"`);
-      if (document.activeElement !== el)
-        throw new Error(
-          `${kind} step "${step}": focus is on "${who(document.activeElement)}", expected "${who(el)}"`,
-        );
+      if (document.activeElement !== el) throw wrongFocus();
       log.push([step, actual]);
     };
     const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 30))));
@@ -873,27 +879,307 @@ async function clientPopovers(consumer: string, evidenceFile: string): Promise<v
       });
       await settle();
     };
-    check("initial", closed, document.body);
+    check("popover", "initial", closed, document.body);
     await press("Tab");
-    check("Tab into the popover trigger", { ...closed, focus: T.pop }, pop);
+    check("popover", "Tab into the popover trigger", { ...closed, focus: T.pop }, pop);
     await act(async () => pop.click());
     await settle();
-    check("Click opens", popOpen, popContent()[0]?.querySelector("button") ?? null);
+    check("popover", "Click opens", popOpen, popContent()[0]?.querySelector("button") ?? null);
     await press("Tab");
     check(
+      "popover",
       "Tab stays on the confirm button",
       popOpen,
       popContent()[0]?.querySelector("button") ?? null,
     );
     await press("Escape");
-    check("Escape closes", { ...closed, focus: T.pop }, pop);
+    check("popover", "Escape closes", { ...closed, focus: T.pop }, pop);
     await press("Tab");
-    check("Tab to the tooltip trigger shows it", tipShown, tip);
+    check("tooltip", "Tab to the tooltip trigger shows it", tipShown, tip);
     await press("Escape");
-    check("Escape hides the tooltip", { ...closed, focus: T.tip }, tip);
+    check("tooltip", "Escape hides the tooltip", { ...closed, focus: T.tip }, tip);
     if (evidenceFile) writeFileSync(evidenceFile, JSON.stringify(log, null, 2));
     await act(async () => app.unmount());
     console.log(POPOVERS_OK);
+  } finally {
+    Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+    await GlobalRegistrator.unregister();
+  }
+}
+
+const TABS_TABLE_OK = "TABS-TABLE-OK";
+
+/** Fresh bun subprocess (same Radix import-time reason). Throws with the child's FAIL message. */
+function renderTabsTable(consumer: string, evidenceFile = ""): string {
+  const r = Bun.spawnSync(["bun", self, "client-tabs-table", consumer, evidenceFile], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (r.exitCode !== 0) throw new Error(`tabs-table journey failed: ${r.stderr.toString().trim()}`);
+  if (r.stdout.toString().trim() !== TABS_TABLE_OK)
+    throw new Error("tabs-table journey did not finish");
+  return TABS_TABLE_OK;
+}
+
+/** Client journey for Tabs then Table: Tab into the tab list, ArrowRight skips the disabled trigger,
+ * ArrowRight again shows the roster, Tab to a sortable header, Enter sorts (asc, then desc), Tab to the
+ * next header, Enter sorts by it. A stateful consumer reorders the rows with the packed
+ * `nextSortDirection`. Keys are synthesized (happy-dom has no native keys). Everything comes from the
+ * consumer; document.activeElement, row element identity and exact state are asserted at every step. */
+async function clientTabsTable(consumer: string, evidenceFile: string): Promise<void> {
+  const { GlobalRegistrator } = await load(consumer, "@happy-dom/global-registrator");
+  GlobalRegistrator.register({ url: "http://localhost:3000/" });
+  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  try {
+    const { createElement: h, act } = await load(consumer, "react");
+    const { createRoot } = await load(consumer, "react-dom/client");
+    const ui = await load(consumer, PKG);
+    // Every label, note and cell differs, so no step passes on text another step already showed.
+    const T = { overview: "Quarterly plan summary", billing: "Invoices settle every Friday" };
+    const seats = "Seven seats assigned";
+    const data = [
+      { id: "orion", name: "Orion Freight", plan: "Zinc" },
+      { id: "cobalt", name: "Cobalt Dairy", plan: "Opal" },
+      { id: "delta", name: "Delta Mills", plan: "Birch" },
+    ];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const app = createRoot(host);
+    // The consumer's sort state; onSort updates it and re-renders, so rows really reorder.
+    let sorted: { col: string; dir: "asc" | "desc" | false } = { col: "", dir: false };
+    const view = () => {
+      const key = (r: (typeof data)[number]) => (sorted.col === "plan" ? r.plan : r.name);
+      const rows = sorted.col ? [...data].sort((a, b) => key(a).localeCompare(key(b))) : data;
+      if (sorted.dir === "desc") rows.reverse();
+      const head = (col: string, label: string) =>
+        h(
+          ui.TableHead,
+          {
+            sortable: true,
+            sort: sorted.col === col ? sorted.dir : false,
+            onSort: () => {
+              sorted = {
+                col,
+                dir: ui.nextSortDirection(sorted.col === col ? sorted.dir : false),
+              };
+              app.render(view());
+            },
+          },
+          label,
+        );
+      return h(
+        ui.Tabs,
+        { defaultValue: "overview" },
+        h(
+          ui.TabsList,
+          null,
+          h(ui.TabsTrigger, { value: "overview" }, "Overview"),
+          h(ui.TabsTrigger, { value: "archive", disabled: true }, "Archive"),
+          h(ui.TabsTrigger, { value: "billing" }, "Billing"),
+          h(ui.TabsTrigger, { value: "members" }, "Members"),
+        ),
+        h(ui.TabsContent, { value: "overview" }, h("p", null, T.overview)),
+        h(ui.TabsContent, { value: "archive" }, h("p", null, "Archived notes")),
+        h(ui.TabsContent, { value: "billing" }, h("p", null, T.billing)),
+        h(
+          ui.TabsContent,
+          { value: "members" },
+          h("p", null, seats),
+          h(
+            ui.Table,
+            null,
+            h(
+              ui.TableHeader,
+              null,
+              h(ui.TableRow, null, head("name", "Customer"), head("plan", "Plan")),
+            ),
+            h(
+              ui.TableBody,
+              null,
+              rows.map((r) =>
+                h(
+                  ui.TableRow,
+                  { key: r.id, id: r.id },
+                  h(ui.TableCell, null, r.name),
+                  h(ui.TableCell, null, r.plan),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    };
+    await act(async () => app.render(view()));
+    const txt = (el: Element) => (el.textContent ?? "").trim();
+    const who = (el: Element | null) =>
+      !el || el === document.body ? (el?.tagName ?? "none") : txt(el) || el.tagName;
+    const tabs = () => [...document.querySelectorAll<HTMLButtonElement>('[role="tab"]')];
+    const tab = (label: string) => tabs().find((t) => txt(t) === label) ?? null;
+    const th = (label: string) =>
+      [...document.querySelectorAll("th")].find((t) => txt(t) === label);
+    const headBtn = (label: string) => th(label)?.querySelector("button") ?? null;
+    const seen = new Map<string, Element>();
+    const snap = (): Snap => {
+      const rows = [...document.querySelectorAll('[data-slot="table-body"] > tr')];
+      let kept = rows.length > 0;
+      for (const r of rows) {
+        if (!seen.has(r.id)) seen.set(r.id, r);
+        if (seen.get(r.id) !== r) kept = false;
+      }
+      return {
+        "tabs.selected": tabs()
+          .filter((t) => t.getAttribute("aria-selected") === "true")
+          .map(txt)
+          .join("|"),
+        "tabs.disabled": tabs()
+          .filter((t) => t.disabled)
+          .map(txt)
+          .join("|"),
+        // TabsContent renders through Presence's render-prop form, so every panel stays in the DOM and
+        // inactive ones only get `hidden`; `forceMount` makes them all visible (the leftover-panel reject).
+        "panel.count": String(document.querySelectorAll('[role="tabpanel"]:not([hidden])').length),
+        "panel.note":
+          document.querySelector('[role="tabpanel"]:not([hidden]) p')?.textContent ?? "",
+        "customer.sort": th("Customer")?.getAttribute("aria-sort") ?? "",
+        "plan.sort": th("Plan")?.getAttribute("aria-sort") ?? "",
+        "rows.order": rows.map((r) => r.id).join("|"),
+        "rows.cells": rows.map((r) => [...r.children].map(txt).join(",")).join("|"),
+        "rows.kept": rows.length ? String(kept) : "",
+        focus: who(document.activeElement),
+      };
+    };
+    const order = (ids: string[]): Snap => ({
+      "rows.order": ids.join("|"),
+      "rows.cells": ids
+        .map((id) => data.find((r) => r.id === id))
+        .map((r) => `${r?.name},${r?.plan}`)
+        .join("|"),
+    });
+    const start: Snap = {
+      "tabs.selected": "Overview",
+      "tabs.disabled": "Archive",
+      "panel.count": "1",
+      "panel.note": T.overview,
+      "customer.sort": "",
+      "plan.sort": "",
+      "rows.order": "",
+      "rows.cells": "",
+      "rows.kept": "",
+      focus: "BODY",
+    };
+    const members: Snap = {
+      ...start,
+      "tabs.selected": "Members",
+      "panel.note": seats,
+      "customer.sort": "none",
+      "plan.sort": "none",
+      ...order(["orion", "cobalt", "delta"]),
+      "rows.kept": "true",
+      focus: "Members",
+    };
+    const log: Array<[string, Snap]> = [];
+    const check = (step: string, expected: Snap, el: Element | null) => {
+      const actual = snap();
+      const wrongFocus = () =>
+        new Error(
+          `tabs-table step "${step}": focus is on "${who(document.activeElement)}", expected "${who(el)}"`,
+        );
+      // Focus identity first, so a wrong element is reported as a focus failure, not a side effect.
+      // A missing expected element is reported by the field checks instead.
+      if (el && document.activeElement !== el) throw wrongFocus();
+      for (const [k, want] of Object.entries(expected))
+        if (actual[k] !== want)
+          throw new Error(`tabs-table step "${step}": ${k} is "${actual[k]}", expected "${want}"`);
+      if (document.activeElement !== el) throw wrongFocus();
+      log.push([step, actual]);
+    };
+    const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 30))));
+    const press = async (key: string) => {
+      const from = document.activeElement ?? document.body;
+      await act(async () => {
+        const ev = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+        if (from.dispatchEvent(ev) && key === "Tab") {
+          // Native Tab default (happy-dom has none): the next enabled tabbable button or tab list
+          // (Radix hands the list's focus to the selected tab) in document order.
+          const stops = [
+            ...document.querySelectorAll<HTMLElement>('button, [role="tablist"]'),
+          ].filter((e) => e.tabIndex >= 0 && !e.hasAttribute("disabled"));
+          stops[(stops.indexOf(from as HTMLElement) + 1) % stops.length]?.focus();
+        } else if (
+          ev.defaultPrevented === false &&
+          key === "Enter" &&
+          from instanceof HTMLButtonElement
+        ) {
+          from.click(); // Native Enter default on a button.
+        }
+      });
+      await settle();
+    };
+    check("initial", start, document.body);
+    await press("Tab");
+    check("Tab into the tab list", { ...start, focus: "Overview" }, tab("Overview"));
+    await press("ArrowRight");
+    check(
+      "ArrowRight skips the disabled Archive tab",
+      { ...start, "tabs.selected": "Billing", "panel.note": T.billing, focus: "Billing" },
+      tab("Billing"),
+    );
+    await press("ArrowRight");
+    check("ArrowRight shows the Members roster", members, tab("Members"));
+    await press("Tab");
+    check(
+      "Tab into the Customer header button",
+      { ...members, focus: "Customer" },
+      headBtn("Customer"),
+    );
+    await press("Enter");
+    check(
+      "Enter sorts Customer ascending",
+      {
+        ...members,
+        "customer.sort": "ascending",
+        ...order(["cobalt", "delta", "orion"]),
+        focus: "Customer",
+      },
+      headBtn("Customer"),
+    );
+    await press("Enter");
+    check(
+      "Enter sorts Customer descending",
+      {
+        ...members,
+        "customer.sort": "descending",
+        ...order(["orion", "delta", "cobalt"]),
+        focus: "Customer",
+      },
+      headBtn("Customer"),
+    );
+    await press("Tab");
+    check(
+      "Tab into the Plan header button",
+      {
+        ...members,
+        "customer.sort": "descending",
+        ...order(["orion", "delta", "cobalt"]),
+        focus: "Plan",
+      },
+      headBtn("Plan"),
+    );
+    await press("Enter");
+    check(
+      "Enter sorts Plan ascending",
+      {
+        ...members,
+        "plan.sort": "ascending",
+        ...order(["delta", "cobalt", "orion"]),
+        focus: "Plan",
+      },
+      headBtn("Plan"),
+    );
+    if (evidenceFile) writeFileSync(evidenceFile, JSON.stringify(log, null, 2));
+    await act(async () => app.unmount());
+    console.log(TABS_TABLE_OK);
   } finally {
     Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
     await GlobalRegistrator.unregister();
@@ -1070,6 +1356,8 @@ async function drive(feature: string): Promise<void> {
     renderMenus(c.consumer, path.join(c.runDir, "evidence", "menus-client.json"));
   } else if (feature === "popovers") {
     renderPopovers(c.consumer, path.join(c.runDir, "evidence", "popovers-client.json"));
+  } else if (feature === "tabs-table") {
+    renderTabsTable(c.consumer, path.join(c.runDir, "evidence", "tabs-table-client.json"));
   } else {
     throw new Error(`unknown feature ${feature}; one of ${FEATURES.join(", ")}`);
   }
@@ -1459,7 +1747,7 @@ async function selfCheck(): Promise<void> {
       ],
       [
         "popover not closed by Escape",
-        'popover step "Escape closes": popover.expanded is "true", expected "false"',
+        'popover step "Escape closes": focus is on "Confirm slot", expected "Open schedule"',
         props("popover-content", "onEscapeKeyDown: (e) => e.preventDefault()"),
       ],
       [
@@ -1473,13 +1761,12 @@ async function selfCheck(): Promise<void> {
       ],
       [
         "popover focus not returned to trigger",
-        'popover step "Escape closes": focus is "BODY", expected "Open schedule"',
+        'popover step "Escape closes": focus is on "BODY", expected "Open schedule"',
         props("popover-content", stay),
       ],
       [
         "popover focus returned to the wrong element (Tooltip trigger)",
-        // Focusing the Tooltip trigger also shows its tooltip, which is what the journey sees first.
-        'popover step "Escape closes": tooltip.count is "1", expected "0"',
+        'popover step "Escape closes": focus is on "Due date", expected "Open schedule"',
         props(
           "popover-content",
           'onCloseAutoFocus: (e) => { e.preventDefault(); document.getElementById("tip-trigger")?.focus(); }',
@@ -1516,6 +1803,72 @@ async function selfCheck(): Promise<void> {
       const pok = pmsg.includes(want);
       console.log(`${pok ? "ok  " : "BAD "} popovers ${label}: "${pmsg}"`);
       if (!pok) failures.push(`popovers ${label}`);
+    }
+    // tabs-table: the Tabs and Table journey against mutated consumers (same clientTabsTable assertions).
+    const ttRender = async (c: string) => renderTabsTable(c);
+    await renderCopy("tabs-table-ok", null, ttRender); // control: unmutated journey passes
+    const ttCases: Array<[string, string, (s: string) => string]> = [
+      [
+        "tab does not move on ArrowRight",
+        'tabs-table step "ArrowRight skips the disabled Archive tab": tabs.selected is "Overview", expected "Billing"',
+        props("tabs-trigger", "onFocus: (e) => e.preventDefault()"),
+      ],
+      [
+        "disabled trigger is selected",
+        'tabs-table step "initial": tabs.selected is "Overview|Archive", expected "Overview"',
+        props("tabs-trigger", '...(props.disabled ? { "aria-selected": "true" } : {})'),
+      ],
+      [
+        "previous panel still shown after the move",
+        'tabs-table step "initial": panel.count is "4", expected "1"',
+        props("tabs-content", "forceMount: true"),
+      ],
+      [
+        "focus on the wrong element after ArrowRight",
+        'tabs-table step "ArrowRight skips the disabled Archive tab": focus is on "BODY", expected "Billing"',
+        props(
+          "tabs-trigger",
+          'onFocus: (e) => { if (e.currentTarget.textContent === "Billing") e.currentTarget.blur(); }',
+        ),
+      ],
+      [
+        "wrong panel content shown",
+        'tabs-table step "initial": panel.note is "Wrong panel", expected "Quarterly plan summary"',
+        props("tabs-content", 'children: jsx("p", { children: "Wrong panel" })'),
+      ],
+      [
+        "aria-sort unchanged after Enter",
+        'tabs-table step "Enter sorts Customer ascending": customer.sort is "none", expected "ascending"',
+        (s) => s.replace("onClick: onSort,", "onClick: () => {},"),
+      ],
+      [
+        "focus on the wrong element after Enter",
+        'tabs-table step "Enter sorts Customer ascending": focus is on "BODY", expected "Customer"',
+        (s) =>
+          s.replace("onClick: onSort,", "onClick: (e) => { onSort?.(); e.currentTarget.blur(); },"),
+      ],
+      [
+        "rows do not reorder after Enter",
+        'tabs-table step "Enter sorts Customer ascending": rows.order is "orion|cobalt|delta", expected "cobalt|delta|orion"',
+        props("table-body", "children: (globalThis.__rows ??= props.children)"),
+      ],
+      [
+        "unsorted column reported as sorted",
+        'tabs-table step "ArrowRight shows the Members roster": customer.sort is "ascending", expected "none"',
+        (s) =>
+          s.replace('"aria-sort": ariaSortValue(sortable, sort),', '"aria-sort": "ascending",'),
+      ],
+    ];
+    for (const [n, [label, want, mutate]] of ttCases.entries()) {
+      let tmsg = "";
+      try {
+        await renderCopy(`tabs-table-${n}`, mutate, ttRender, label);
+      } catch (e) {
+        tmsg = e instanceof Error ? e.message : String(e);
+      }
+      const tok = tmsg.includes(want);
+      console.log(`${tok ? "ok  " : "BAD "} tabs-table ${label}: "${tmsg}"`);
+      if (!tok) failures.push(`tabs-table ${label}`);
     }
     // Packed package whose exports map lists a types file that is absent.
     const typesPkg = path.join(tmp, "types-pkg");
@@ -1602,6 +1955,7 @@ try {
   else if (cmd === "client-overlays" && arg) await clientOverlays(arg, rest[0] ?? "");
   else if (cmd === "client-menus" && arg) await clientMenus(arg, rest[0] ?? "");
   else if (cmd === "client-popovers" && arg) await clientPopovers(arg, rest[0] ?? "");
+  else if (cmd === "client-tabs-table" && arg) await clientTabsTable(arg, rest[0] ?? "");
   else if (cmd === "check-markup" && arg) assertMarkup(readFileSync(arg, "utf8"), rest);
   else
     throw new Error(

@@ -12,7 +12,8 @@ Features a consumer touches, from the public exports (`.`, `./tokens`, `./tailwi
 | Overlays: Dialog and Sheet open, Escape, focus      | `overlays.md`          | `overlays`          |
 | Menus: DropdownMenu and Select keyboard choice      | `menus.md`             | `menus`             |
 | Popovers: Popover and Tooltip open state            | `popovers.md`          | `popovers`          |
+| Tabs and Table: arrow-key tabs and header sort      | `tabs-table.md`        | `tabs-table`        |
 
 `render-primitives` also client-renders `StatusSelect` (happy-dom) to prove its selected value; static markup cannot show that label.
 
-Not covered: Storybook, Playwright visual tests, and interactive Radix behavior other than Dialog, Sheet, DropdownMenu, Select, Popover and Tooltip.
+Not covered: Storybook, Playwright visual tests, and interactive Radix behavior other than Dialog, Sheet, DropdownMenu, Select, Popover, Tooltip and Tabs (ArrowRight, disabled skip), and Table header sort (Enter).
