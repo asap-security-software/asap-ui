@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { act, render, screen } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { Avatar, AvatarFallback, AvatarImage } from "../../src/components/ui/avatar";
 
 describe("Avatar", () => {
@@ -9,7 +9,7 @@ describe("Avatar", () => {
         <AvatarFallback>LT</AvatarFallback>
       </Avatar>,
     );
-    expect(screen.getByText("LT")).toBeTruthy();
+    expect(screen.getByText("LT").textContent).toBe("LT");
   });
 
   test("keeps the photo name", () => {
@@ -22,32 +22,22 @@ describe("Avatar", () => {
     expect(screen.getByRole("img", { name: "Lead tech" })).toBeTruthy();
   });
 
-  test("shows initials and no image when the photo fails to load", async () => {
-    const NativeImage = window.Image;
-    const loaders: HTMLImageElement[] = [];
-    window.Image = class extends NativeImage {
-      constructor() {
-        super();
-        loaders.push(this);
-      }
-    };
-    try {
-      const { container } = render(
-        <Avatar>
-          <AvatarImage alt="Lead tech" src="http://127.0.0.1:1/missing.png" />
-          <AvatarFallback delayMs={0}>LT</AvatarFallback>
-        </Avatar>,
-      );
-      expect(loaders.length).toBeGreaterThan(0);
-      await act(async () => {
-        for (const loader of loaders) loader.dispatchEvent(new Event("error"));
-      });
-      expect((await screen.findByText("LT")).textContent).toBe("LT");
-      expect(screen.queryByRole("img", { name: "Lead tech" })).toBeNull();
-      expect(container.querySelector("img")).toBeNull();
-    } finally {
-      window.Image = NativeImage;
-    }
+  test("shows initials and no image when the photo reports an error status", async () => {
+    const statuses: string[] = [];
+    const { container } = render(
+      <Avatar>
+        <AvatarImage
+          alt="Lead tech"
+          src="http://127.0.0.1:1/missing.png"
+          onLoadingStatusChange={(status) => statuses.push(status)}
+        />
+        <AvatarFallback delayMs={0}>LT</AvatarFallback>
+      </Avatar>,
+    );
+    expect((await screen.findByText("LT")).textContent).toBe("LT");
+    expect(statuses.at(-1)).toBe("error");
+    expect(screen.queryByRole("img", { name: "Lead tech" })).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
   });
 
   test("touch size is the 52px target", () => {
