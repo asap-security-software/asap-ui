@@ -23,6 +23,43 @@ describe("Tabs", () => {
     expect(screen.getByText("Backboxes are on site.")).toBeTruthy();
   });
 
+  test("ArrowRight and ArrowLeft move selection, focus, and the shown panel", async () => {
+    const user = userEvent.setup();
+    render(
+      <Tabs defaultValue="details">
+        <TabsList>
+          <TabsTrigger value="details">Details</TabsTrigger>
+          <TabsTrigger value="notes">Notes</TabsTrigger>
+        </TabsList>
+        <TabsContent value="details">Two readers.</TabsContent>
+        <TabsContent value="notes">Backboxes are on site.</TabsContent>
+      </Tabs>,
+    );
+    const details = screen.getByRole("tab", { name: "Details" });
+    const notes = screen.getByRole("tab", { name: "Notes" });
+
+    await user.tab();
+    expect(document.activeElement).toBe(details);
+    expect(details.getAttribute("aria-selected")).toBe("true");
+    expect(notes.getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByText("Two readers.")).toBeTruthy();
+    expect(screen.queryByText("Backboxes are on site.")).toBeNull();
+
+    await user.keyboard("{ArrowRight}");
+    expect(document.activeElement).toBe(notes);
+    expect(notes.getAttribute("aria-selected")).toBe("true");
+    expect(details.getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByText("Backboxes are on site.")).toBeTruthy();
+    expect(screen.queryByText("Two readers.")).toBeNull();
+
+    await user.keyboard("{ArrowLeft}");
+    expect(document.activeElement).toBe(details);
+    expect(details.getAttribute("aria-selected")).toBe("true");
+    expect(notes.getAttribute("aria-selected")).toBe("false");
+    expect(screen.getByText("Two readers.")).toBeTruthy();
+    expect(screen.queryByText("Backboxes are on site.")).toBeNull();
+  });
+
   test("touch triggers use the tall target", () => {
     render(
       <Tabs defaultValue="details">
