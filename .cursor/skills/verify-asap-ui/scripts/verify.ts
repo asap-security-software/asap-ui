@@ -32,6 +32,7 @@ const FEATURES = [
   "render-primitives",
   "tokens-theme",
   "form-controls",
+  "overlays",
 ];
 
 type Current = { id: string; runDir: string; consumer: string; smoke: string; smokeSha256: string };
@@ -346,6 +347,203 @@ async function clientForm(consumer: string, evidenceFile: string): Promise<void>
   }
 }
 
+const OVERLAYS_OK = "OVERLAYS-OK";
+const OVERLAY_KINDS = ["dialog", "sheet"] as const;
+
+/** Fresh bun subprocess (same Radix import-time reason). Throws with the child's FAIL message. */
+function renderOverlays(consumer: string, evidenceFile = ""): string {
+  const r = Bun.spawnSync(["bun", self, "client-overlays", consumer, evidenceFile], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (r.exitCode !== 0) throw new Error(`overlays journey failed: ${r.stderr.toString().trim()}`);
+  if (r.stdout.toString().trim() !== OVERLAYS_OK)
+    throw new Error("overlays journey did not finish");
+  return OVERLAYS_OK;
+}
+
+/** Client journey for Dialog and Sheet: open, focus trap (every Tab and Shift+Tab stop), Escape,
+ * focus return. Everything comes from the consumer; document.activeElement is asserted at every step. */
+async function clientOverlays(consumer: string, evidenceFile: string): Promise<void> {
+  const { GlobalRegistrator } = await load(consumer, "@happy-dom/global-registrator");
+  GlobalRegistrator.register({ url: "http://localhost:3000/" });
+  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  try {
+    const { createElement: h, act } = await load(consumer, "react");
+    const { createRoot } = await load(consumer, "react-dom/client");
+    const ui = await load(consumer, PKG);
+    const evidence: Record<string, Array<[string, Snap]>> = {};
+    for (const kind of OVERLAY_KINDS) {
+      const Cap = kind === "dialog" ? "Dialog" : "Sheet";
+      // Unique text per overlay and per element, so no step can pass on another step's text.
+      const T = {
+        open: `Open ${kind}`,
+        outside: `Outside ${kind}`,
+        title: `Review ${kind} heading`,
+        desc: `The ${kind} body copy`,
+        first: `First ${kind} action`,
+        second: `Second ${kind} action`,
+        close: "Close",
+      };
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      const app = createRoot(host);
+      const btn = (id: string, text: string) =>
+        h("button", { id: `${kind}-${id}`, type: "button" }, text);
+      await act(async () =>
+        app.render(
+          h(
+            "div",
+            null,
+            h(
+              ui[Cap],
+              null,
+              h(ui[`${Cap}Trigger`], { asChild: true }, btn("open", T.open)),
+              h(
+                ui[`${Cap}Content`],
+                null,
+                h(
+                  ui[`${Cap}Header`],
+                  null,
+                  h(ui[`${Cap}Title`], null, T.title),
+                  h(ui[`${Cap}Description`], null, T.desc),
+                ),
+                h(ui[`${Cap}Footer`], null, btn("first", T.first), btn("second", T.second)),
+              ),
+            ),
+            btn("outside", T.outside),
+          ),
+        ),
+      );
+      const must$ = (id: string): HTMLElement => {
+        const el = document.getElementById(`${kind}-${id}`);
+        if (!el) throw new Error(`${kind} ${id} button not rendered`);
+        return el;
+      };
+      const trigger = must$("open");
+      const who = (el: Element | null) =>
+        !el || el === document.body
+          ? (el?.tagName ?? "none")
+          : el.getAttribute("aria-label") || (el.textContent ?? "").trim() || el.tagName;
+      const content = () => document.querySelectorAll(`[data-slot="${kind}-content"]`);
+      const text = (id: string | null) =>
+        id ? (document.getElementById(id)?.textContent ?? "") : "";
+      const snap = (): Snap => {
+        const d = content()[0];
+        return {
+          "trigger.expanded": trigger.getAttribute("aria-expanded") ?? "",
+          "trigger.state": trigger.getAttribute("data-state") ?? "",
+          "overlay.state": d?.getAttribute("data-state") ?? "none",
+          "overlay.count": String(content().length),
+          "overlay.role": d?.getAttribute("role") ?? "",
+          "overlay.name": text(d?.getAttribute("aria-labelledby") ?? null),
+          "overlay.description": text(d?.getAttribute("aria-describedby") ?? null),
+          focus: who(document.activeElement),
+        };
+      };
+      const closed: Snap = {
+        "trigger.expanded": "false",
+        "trigger.state": "closed",
+        "overlay.state": "none",
+        "overlay.count": "0",
+        "overlay.role": "",
+        "overlay.name": "",
+        "overlay.description": "",
+        focus: "BODY",
+      };
+      const opened: Snap = {
+        "trigger.expanded": "true",
+        "trigger.state": "open",
+        "overlay.state": "open",
+        "overlay.count": "1",
+        "overlay.role": "dialog",
+        "overlay.name": T.title,
+        "overlay.description": T.desc,
+        focus: T.first,
+      };
+      const log: Array<[string, Snap]> = [];
+      const check = (step: string, expected: Snap, el: Element | null) => {
+        const actual = snap();
+        for (const [k, want] of Object.entries(expected))
+          if (actual[k] !== want)
+            throw new Error(`${kind} step "${step}": ${k} is "${actual[k]}", expected "${want}"`);
+        if (document.activeElement !== el)
+          throw new Error(
+            `${kind} step "${step}": focus is on "${who(document.activeElement)}", expected "${who(el)}"`,
+          );
+        log.push([step, actual]);
+      };
+      const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 30))));
+      const press = async (key: string, shift = false) => {
+        const from = document.activeElement ?? document.body;
+        await act(async () => {
+          const ev = new KeyboardEvent("keydown", {
+            key,
+            shiftKey: shift,
+            bubbles: true,
+            cancelable: true,
+          });
+          if (from.dispatchEvent(ev) && key === "Tab") {
+            // Native Tab default (happy-dom has none): neighbouring tabbable in document order, wrapping.
+            const stops = [...document.querySelectorAll<HTMLElement>("button, [tabindex]")].filter(
+              (e) => e.tabIndex >= 0,
+            );
+            const i = stops.indexOf(from as HTMLElement);
+            stops[(i + (shift ? -1 : 1) + stops.length) % stops.length]?.focus();
+          }
+        });
+        await settle();
+      };
+      check("initial", closed, document.body);
+      trigger.focus();
+      check("focus trigger", { ...closed, focus: T.open }, trigger);
+      await act(async () => trigger.click());
+      await settle();
+      const c = content()[0];
+      if (content().length !== 1 || !c)
+        throw new Error(
+          `${kind} overlay not rendered after click: found ${content().length}, expected 1`,
+        );
+      check("open", opened, must$("first"));
+      const inside = (): boolean => c.contains(document.activeElement);
+      const stops: Array<[string, boolean, string, HTMLElement | null]> = [
+        ["Tab to second", false, T.second, must$("second")],
+        ["Tab to close", false, T.close, c.querySelector('[aria-label="Close"]')],
+        ["Tab wraps to first", false, T.first, must$("first")],
+        ["Shift+Tab wraps to close", true, T.close, c.querySelector('[aria-label="Close"]')],
+        ["Shift+Tab to second", true, T.second, must$("second")],
+        ["Shift+Tab to first", true, T.first, must$("first")],
+      ];
+      for (const [step, shift, name, el] of stops) {
+        await press("Tab", shift);
+        if (!inside())
+          throw new Error(
+            `${kind} focus escaped the trap at "${step}": Tab landed on "${who(document.activeElement)}"`,
+          );
+        check(step, { ...opened, focus: name }, el);
+      }
+      await press("Escape");
+      const left = content()[0];
+      if (trigger.getAttribute("aria-expanded") === "true")
+        throw new Error(`${kind} did not close on Escape`);
+      if (left)
+        throw new Error(
+          `${kind} still open after close: left in the DOM (data-state="${left.getAttribute("data-state")}")`,
+        );
+      check("Escape closes and returns focus", { ...closed, focus: T.open }, trigger);
+      evidence[kind] = log;
+      await act(async () => app.unmount());
+      host.remove();
+    }
+    if (evidenceFile) writeFileSync(evidenceFile, JSON.stringify(evidence, null, 2));
+    console.log(OVERLAYS_OK);
+  } finally {
+    Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+    await GlobalRegistrator.unregister();
+  }
+}
+
 /** Offline: react, react-dom, tailwindcss, radix etc. come from this repo's node_modules. */
 function linkDeps(consumer: string): void {
   for (const name of readdirSync(path.join(root, "node_modules"))) {
@@ -510,6 +708,8 @@ async function drive(feature: string): Promise<void> {
     assertMarkup(css, ['[data-asap-theme="harbor"]', "#0b3d91", "#082f73"]);
   } else if (feature === "form-controls") {
     renderForm(c.consumer, path.join(c.runDir, "evidence", "form-controls-client.json"));
+  } else if (feature === "overlays") {
+    renderOverlays(c.consumer, path.join(c.runDir, "evidence", "overlays-client.json"));
   } else {
     throw new Error(`unknown feature ${feature}; one of ${FEATURES.join(", ")}`);
   }
@@ -741,6 +941,65 @@ async function selfCheck(): Promise<void> {
       console.log(`${fok ? "ok  " : "BAD "} form-controls ${label}: "${fmsg}"`);
       if (!fok) failures.push(`form-controls ${label}`);
     }
+    // overlays: the Dialog and Sheet journey against mutated consumers (same clientOverlays assertions).
+    const overlayRender = async (c: string) => renderOverlays(c);
+    await renderCopy("overlays-ok", null, overlayRender); // control: unmutated journey passes
+    for (const kind of ["dialog", "sheet"]) {
+      const slot = `"data-slot": "${kind}-content",`;
+      const add = (extra: string) => (s: string) => s.replace(slot, `${slot} ${extra}`);
+      const overlayCases: Array<[string, string, (s: string) => string]> = [
+        [
+          "missing overlay",
+          `${kind} overlay not rendered after click`,
+          (s) => s.replace(slot, `"data-slot": "${kind}-gone",`),
+        ],
+        [
+          "Escape does not close",
+          `${kind} did not close on Escape`,
+          add("onEscapeKeyDown: (e) => e.preventDefault(),"),
+        ],
+        [
+          "leftover open state after close",
+          `${kind} still open after close: left in the DOM (data-state="open")`,
+          // The overlay closes (trigger collapses) but a stale open copy stays in the page.
+          add(
+            `onCloseAutoFocus: () => { const d = document.createElement("div"); d.setAttribute("data-slot", "${kind}-content"); d.setAttribute("data-state", "open"); document.body.appendChild(d); },`,
+          ),
+        ],
+        [
+          "focus not returned to trigger",
+          `focus is "BODY", expected "Open ${kind}"`,
+          add("onCloseAutoFocus: (e) => e.preventDefault(),"),
+        ],
+        [
+          "focus escapes the trap",
+          `${kind} focus escaped the trap`,
+          // No wrap (focus leaves the edge element first) and no focusin pull-back: Tab leaves the overlay.
+          (s) =>
+            `document.addEventListener("focusin", (e) => e.stopImmediatePropagation(), true);\n${add(`onKeyDown: (e) => { if (e.key === "Tab") e.currentTarget.focus(); },`)(s)}`,
+        ],
+        [
+          "wrong content (Close renamed)",
+          'focus is "Dismiss", expected "Close"',
+          (s) =>
+            s.replace(
+              new RegExp(`(${slot}[\\s\\S]*?)"aria-label": "Close"`),
+              '$1"aria-label": "Dismiss"',
+            ),
+        ],
+      ];
+      for (const [n, [label, want, mutate]] of overlayCases.entries()) {
+        let omsg = "";
+        try {
+          await renderCopy(`overlay-${kind}-${n}`, mutate, overlayRender, label);
+        } catch (e) {
+          omsg = e instanceof Error ? e.message : String(e);
+        }
+        const ook = omsg.includes(want);
+        console.log(`${ook ? "ok  " : "BAD "} overlays ${kind} ${label}: "${omsg}"`);
+        if (!ook) failures.push(`overlays ${kind} ${label}`);
+      }
+    }
     // Packed package whose exports map lists a types file that is absent.
     const typesPkg = path.join(tmp, "types-pkg");
     mkdirSync(typesPkg);
@@ -823,6 +1082,7 @@ try {
   else if (cmd === "client-select" && arg)
     console.log(SELECT_TEXT + (await clientSelectText(arg, rest[0] ?? "", rest[1] ?? "")));
   else if (cmd === "client-form" && arg) await clientForm(arg, rest[0] ?? "");
+  else if (cmd === "client-overlays" && arg) await clientOverlays(arg, rest[0] ?? "");
   else if (cmd === "check-markup" && arg) assertMarkup(readFileSync(arg, "utf8"), rest);
   else
     throw new Error(

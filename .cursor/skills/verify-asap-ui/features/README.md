@@ -9,7 +9,8 @@ Features a consumer touches, from the public exports (`.`, `./tokens`, `./tailwi
 | Primitives: Button, Badge, StatusPill, StatusSelect | `render-primitives.md` | `render-primitives` |
 | Tokens and theming                                  | `tokens-theme.md`      | `tokens-theme`      |
 | Form controls: Input, Checkbox, Switch (touch)      | `form-controls.md`     | `form-controls`     |
+| Overlays: Dialog and Sheet open, Escape, focus      | `overlays.md`          | `overlays`          |
 
 `render-primitives` also client-renders `StatusSelect` (happy-dom) to prove its selected value; static markup cannot show that label.
 
-Not covered: Storybook, Playwright visual tests, and interactive Radix behavior (dialogs, menus open state).
+Not covered: Storybook, Playwright visual tests, and interactive Radix behavior other than Dialog and Sheet (menus, popovers, tooltips open state).
