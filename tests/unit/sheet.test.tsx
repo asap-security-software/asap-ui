@@ -9,7 +9,7 @@ import {
   SheetTrigger,
 } from "../../src/components/ui/sheet";
 
-function Example({ side }: { side?: "right" | "bottom" }) {
+function Example({ side }: { side?: "right" | "bottom" | "left" | "top" }) {
   return (
     <Sheet>
       <SheetTrigger>Open task</SheetTrigger>
@@ -40,5 +40,25 @@ describe("Sheet", () => {
     expect(dialog.getAttribute("data-side")).toBe("bottom");
     expect(dialog.className).toContain("animate-drawer-bottom");
     expect(document.querySelector("[data-slot=sheet-handle]")).toBeTruthy();
+  });
+
+  test("left sheet sets data-side, animation class and has no handle", async () => {
+    const user = userEvent.setup();
+    render(<Example side="left" />);
+    await user.click(screen.getByRole("button", { name: "Open task" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.getAttribute("data-side")).toBe("left");
+    expect(dialog.className).toContain("animate-drawer-left");
+    expect(document.querySelector("[data-slot=sheet-handle]")).toBeNull();
+  });
+
+  test("top sheet sets data-side, animation class and has no handle", async () => {
+    const user = userEvent.setup();
+    render(<Example side="top" />);
+    await user.click(screen.getByRole("button", { name: "Open task" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.getAttribute("data-side")).toBe("top");
+    expect(dialog.className).toContain("animate-drawer-top");
+    expect(document.querySelector("[data-slot=sheet-handle]")).toBeNull();
   });
 });
