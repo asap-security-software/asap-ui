@@ -292,7 +292,7 @@ async function clientForm(consumer: string, evidenceFile: string): Promise<void>
           el.dispatchEvent(
             new KeyboardEvent(type, { key: " ", code: "Space", bubbles: true, cancelable: true }),
           );
-        // happy-dom lacks the browser default: Space keyup on a button clicks it unless cancelled.
+        // Synthesized: happy-dom lacks the Space-to-click default, so click only if neither event was cancelled.
         if (key("keydown") && key("keyup")) el.click();
       });
     };
@@ -312,9 +312,9 @@ async function clientForm(consumer: string, evidenceFile: string): Promise<void>
       ["type first value", input, () => typeText(TOKEN_A), { "input.value": TOKEN_A }],
       ["type second value", input, () => typeText(TOKEN_B), { "input.value": TOKEN_B }],
       ["click checkbox", checkbox, click(checkbox), flip("checkbox", true)],
-      ["space on checkbox", checkbox, space(checkbox), flip("checkbox", false)],
+      ["synthesized Space on checkbox", checkbox, space(checkbox), flip("checkbox", false)],
       ["click switch", sw, click(sw), flip("switch", true)],
-      ["space on switch", sw, space(sw), flip("switch", false)],
+      ["synthesized Space on switch", sw, space(sw), flip("switch", false)],
     ];
     const log: Array<[string, Snap]> = [["initial", snap()]];
     for (const [label, el, action, patch] of steps) {
@@ -718,6 +718,11 @@ async function selfCheck(): Promise<void> {
         "lost focus after Switch click",
         'focus is on "BODY", expected "switch"',
         props("switch", "onClick: (e) => e.currentTarget.blur()"),
+      ],
+      [
+        "Space keydown preventDefault",
+        'form step "synthesized Space on checkbox": checkbox.aria-checked is "true", expected "false"',
+        props("checkbox", "onKeyDown: (e) => { if (e.key === ' ') e.preventDefault(); }"),
       ],
     ];
     for (const [label, want, mutate] of formCases) {

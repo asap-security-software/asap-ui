@@ -14,11 +14,11 @@ Consumers render `Input`, `Checkbox` and `Switch` from the main entry, usually a
 
 1. type `kestrel-7041` into the Input (one input event per key),
 2. type `magnolia-2285` (replaces the first; neither token contains the other),
-3. click the Checkbox, 4. Space on the Checkbox, 5. click the Switch, 6. Space on the Switch.
+3. click the Checkbox, 4. synthesized Space on the Checkbox, 5. click the Switch, 6. synthesized Space on the Switch.
 
-After every step it asserts with `===` the Input value and type, `role`, `aria-checked`, `data-state` and the accessible name (`label[for]` text) of all three controls, and that `document.activeElement` is the control just driven. happy-dom does not turn a Space keyup into a click, so the driver clicks after an uncancelled keydown+keyup, as a browser does. Evidence: `form-controls-client.json` (every step's state and the controls' outerHTML).
+After every step it asserts with `===` the Input value and type, `role`, `aria-checked`, `data-state` and the accessible name (`label[for]` text) of all three controls, and that `document.activeElement` is the control just driven. Space is synthesized: the driver dispatches keydown+keyup, then calls `click()` only if neither event was cancelled. This proves the click path, focus, and that cancellation is honored; it does not prove native Space-to-click in a real browser. Evidence: `form-controls-client.json` (every step's state and the controls' outerHTML).
 
-`self-check` re-runs the same journey against throwaway consumers whose `dist/index.js` is mutated, and requires a non-zero failure with a distinctive message for: a missing control, a removed touch class (Input, Checkbox, Switch), a wrong Input value, a leftover first value when the second is required, a Checkbox or Switch that never toggles, a Checkbox with the wrong role, and focus lost after a Switch click.
+`self-check` re-runs the same journey against throwaway consumers whose `dist/index.js` is mutated, and requires a non-zero failure with a distinctive message for: a missing control, a removed touch class (Input, Checkbox, Switch), a wrong Input value, a leftover first value when the second is required, a Checkbox or Switch that never toggles, a Checkbox with the wrong role, focus lost after a Switch click, and a Checkbox whose Space keydown calls `preventDefault` (eleven rejects in all).
 
 ## Gotchas
 
