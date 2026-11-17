@@ -11,7 +11,8 @@ Features a consumer touches, from the public exports (`.`, `./tokens`, `./tailwi
 | Form controls: Input, Checkbox, Switch (touch)      | `form-controls.md`     | `form-controls`     |
 | Overlays: Dialog and Sheet open, Escape, focus      | `overlays.md`          | `overlays`          |
 | Menus: DropdownMenu and Select keyboard choice      | `menus.md`             | `menus`             |
+| Popovers: Popover and Tooltip open state            | `popovers.md`          | `popovers`          |
 
 `render-primitives` also client-renders `StatusSelect` (happy-dom) to prove its selected value; static markup cannot show that label.
 
-Not covered: Storybook, Playwright visual tests, and interactive Radix behavior other than Dialog, Sheet, DropdownMenu and Select (popovers, tooltips open state).
+Not covered: Storybook, Playwright visual tests, and interactive Radix behavior other than Dialog, Sheet, DropdownMenu, Select, Popover and Tooltip.

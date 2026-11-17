@@ -34,6 +34,7 @@ const FEATURES = [
   "form-controls",
   "overlays",
   "menus",
+  "popovers",
 ];
 
 type Current = { id: string; runDir: string; consumer: string; smoke: string; smokeSha256: string };
@@ -724,6 +725,181 @@ async function clientMenus(consumer: string, evidenceFile: string): Promise<void
   }
 }
 
+const POPOVERS_OK = "POPOVERS-OK";
+
+/** Fresh bun subprocess (same Radix import-time reason). Throws with the child's FAIL message. */
+function renderPopovers(consumer: string, evidenceFile = ""): string {
+  const r = Bun.spawnSync(["bun", self, "client-popovers", consumer, evidenceFile], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (r.exitCode !== 0) throw new Error(`popovers journey failed: ${r.stderr.toString().trim()}`);
+  if (r.stdout.toString().trim() !== POPOVERS_OK)
+    throw new Error("popovers journey did not finish");
+  return POPOVERS_OK;
+}
+
+/** Client journey for Popover then Tooltip: Tab to the Popover trigger, click opens, Tab inside, Escape
+ * closes with focus back on the trigger; Tab to the Tooltip trigger shows it, Escape hides it. Keys are
+ * synthesized (happy-dom has no native keys). Everything comes from the consumer; document.activeElement
+ * and exact state are asserted at every step. */
+async function clientPopovers(consumer: string, evidenceFile: string): Promise<void> {
+  const { GlobalRegistrator } = await load(consumer, "@happy-dom/global-registrator");
+  GlobalRegistrator.register({ url: "http://localhost:3000/" });
+  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  try {
+    const { createElement: h, act } = await load(consumer, "react");
+    const { createRoot } = await load(consumer, "react-dom/client");
+    const ui = await load(consumer, PKG);
+    // Every label differs, so no step can pass on text another step already showed.
+    const T = {
+      pop: "Open schedule",
+      note: "Saturday session note",
+      confirm: "Confirm slot",
+      tip: "Due date",
+      tipNote: "Reminder sent November 8",
+    };
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const app = createRoot(host);
+    await act(async () =>
+      app.render(
+        h(
+          ui.TooltipProvider,
+          { delayDuration: 0 },
+          h(
+            ui.Popover,
+            null,
+            h(ui.PopoverTrigger, { id: "pop-trigger" }, T.pop),
+            h(
+              ui.PopoverContent,
+              null,
+              h("p", null, T.note),
+              h("button", { type: "button" }, T.confirm),
+            ),
+          ),
+          h(
+            ui.Tooltip,
+            null,
+            h(ui.TooltipTrigger, { id: "tip-trigger" }, T.tip),
+            h(ui.TooltipContent, null, T.tipNote),
+          ),
+        ),
+      ),
+    );
+    const pop = document.getElementById("pop-trigger");
+    const tip = document.getElementById("tip-trigger");
+    if (!pop || !tip) throw new Error("popover or tooltip trigger not rendered");
+    const txt = (el: Element) => (el.textContent ?? "").trim();
+    const who = (el: Element | null) =>
+      !el || el === document.body ? (el?.tagName ?? "none") : txt(el) || el.tagName;
+    const popContent = () => document.querySelectorAll('[data-slot="popover-content"]');
+    const tipContent = () => document.querySelectorAll('[data-slot="tooltip-content"]');
+    const snap = (): Snap => {
+      const pc = popContent()[0];
+      const tc = tipContent()[0];
+      const role = document.querySelector('[role="tooltip"]');
+      return {
+        "popover.expanded": pop.getAttribute("aria-expanded") ?? "",
+        "popover.state": pop.getAttribute("data-state") ?? "",
+        "popover.count": String(popContent().length),
+        "popover.role": pc?.getAttribute("role") ?? "",
+        "popover.text": pc ? [...pc.children].map(txt).join("|") : "",
+        "tooltip.count": String(tipContent().length),
+        "tooltip.state": tc?.getAttribute("data-state") ?? "",
+        "tooltip.text": role ? txt(role) : "",
+        "tooltip.described": String(!!tc && tip.getAttribute("aria-describedby") === tc.id),
+        focus: who(document.activeElement),
+      };
+    };
+    const closed: Snap = {
+      "popover.expanded": "false",
+      "popover.state": "closed",
+      "popover.count": "0",
+      "popover.role": "",
+      "popover.text": "",
+      "tooltip.count": "0",
+      "tooltip.state": "",
+      "tooltip.text": "",
+      "tooltip.described": "false",
+      focus: "BODY",
+    };
+    const popOpen: Snap = {
+      ...closed,
+      "popover.expanded": "true",
+      "popover.state": "open",
+      "popover.count": "1",
+      "popover.role": "dialog",
+      "popover.text": `${T.note}|${T.confirm}`,
+      focus: T.confirm,
+    };
+    const tipShown: Snap = {
+      ...closed,
+      "tooltip.count": "1",
+      "tooltip.state": "instant-open",
+      "tooltip.text": T.tipNote,
+      "tooltip.described": "true",
+      focus: T.tip,
+    };
+    const log: Array<[string, Snap]> = [];
+    const check = (step: string, expected: Snap, el: Element | null) => {
+      const actual = snap();
+      const kind =
+        step.startsWith("Tab to the tooltip") || step.startsWith("Escape hides")
+          ? "tooltip"
+          : "popover";
+      for (const [k, want] of Object.entries(expected))
+        if (actual[k] !== want)
+          throw new Error(`${kind} step "${step}": ${k} is "${actual[k]}", expected "${want}"`);
+      if (document.activeElement !== el)
+        throw new Error(
+          `${kind} step "${step}": focus is on "${who(document.activeElement)}", expected "${who(el)}"`,
+        );
+      log.push([step, actual]);
+    };
+    const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 30))));
+    const press = async (key: string) => {
+      const from = document.activeElement ?? document.body;
+      await act(async () => {
+        const ev = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+        if (from.dispatchEvent(ev) && key === "Tab") {
+          // Native Tab default (happy-dom has none): the next tabbable in document order.
+          const stops = [...document.querySelectorAll<HTMLElement>("button")].filter(
+            (e) => e.tabIndex >= 0,
+          );
+          stops[(stops.indexOf(from as HTMLElement) + 1) % stops.length]?.focus();
+        }
+      });
+      await settle();
+    };
+    check("initial", closed, document.body);
+    await press("Tab");
+    check("Tab into the popover trigger", { ...closed, focus: T.pop }, pop);
+    await act(async () => pop.click());
+    await settle();
+    check("Click opens", popOpen, popContent()[0]?.querySelector("button") ?? null);
+    await press("Tab");
+    check(
+      "Tab stays on the confirm button",
+      popOpen,
+      popContent()[0]?.querySelector("button") ?? null,
+    );
+    await press("Escape");
+    check("Escape closes", { ...closed, focus: T.pop }, pop);
+    await press("Tab");
+    check("Tab to the tooltip trigger shows it", tipShown, tip);
+    await press("Escape");
+    check("Escape hides the tooltip", { ...closed, focus: T.tip }, tip);
+    if (evidenceFile) writeFileSync(evidenceFile, JSON.stringify(log, null, 2));
+    await act(async () => app.unmount());
+    console.log(POPOVERS_OK);
+  } finally {
+    Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+    await GlobalRegistrator.unregister();
+  }
+}
+
 /** Offline: react, react-dom, tailwindcss, radix etc. come from this repo's node_modules. */
 function linkDeps(consumer: string): void {
   for (const name of readdirSync(path.join(root, "node_modules"))) {
@@ -892,6 +1068,8 @@ async function drive(feature: string): Promise<void> {
     renderOverlays(c.consumer, path.join(c.runDir, "evidence", "overlays-client.json"));
   } else if (feature === "menus") {
     renderMenus(c.consumer, path.join(c.runDir, "evidence", "menus-client.json"));
+  } else if (feature === "popovers") {
+    renderPopovers(c.consumer, path.join(c.runDir, "evidence", "popovers-client.json"));
   } else {
     throw new Error(`unknown feature ${feature}; one of ${FEATURES.join(", ")}`);
   }
@@ -1269,6 +1447,76 @@ async function selfCheck(): Promise<void> {
       console.log(`${mok ? "ok  " : "BAD "} menus ${label}: "${mmsg}"`);
       if (!mok) failures.push(`menus ${label}`);
     }
+    // popovers: the Popover and Tooltip journey against mutated consumers (same clientPopovers assertions).
+    const popRender = async (c: string) => renderPopovers(c);
+    await renderCopy("popovers-ok", null, popRender); // control: unmutated journey passes
+    const stay = "onCloseAutoFocus: (e) => e.preventDefault()";
+    const popCases: Array<[string, string, (s: string) => string]> = [
+      [
+        "popover never opens",
+        'popover step "Click opens": popover.expanded is "false", expected "true"',
+        props("popover-trigger", "onClick: (e) => e.preventDefault()"),
+      ],
+      [
+        "popover not closed by Escape",
+        'popover step "Escape closes": popover.expanded is "true", expected "false"',
+        props("popover-content", "onEscapeKeyDown: (e) => e.preventDefault()"),
+      ],
+      [
+        "popover leftover open state after Escape",
+        'popover step "Escape closes": popover.count is "1", expected "0"',
+        // The popover closes (trigger collapses) but a stale open copy stays in the page.
+        props(
+          "popover-content",
+          `onCloseAutoFocus: () => { const d = document.createElement("div"); d.setAttribute("data-slot", "popover-content"); d.setAttribute("data-state", "open"); document.body.appendChild(d); }`,
+        ),
+      ],
+      [
+        "popover focus not returned to trigger",
+        'popover step "Escape closes": focus is "BODY", expected "Open schedule"',
+        props("popover-content", stay),
+      ],
+      [
+        "popover focus returned to the wrong element (Tooltip trigger)",
+        // Focusing the Tooltip trigger also shows its tooltip, which is what the journey sees first.
+        'popover step "Escape closes": tooltip.count is "1", expected "0"',
+        props(
+          "popover-content",
+          'onCloseAutoFocus: (e) => { e.preventDefault(); document.getElementById("tip-trigger")?.focus(); }',
+        ),
+      ],
+      [
+        "popover shows wrong content",
+        'popover step "Click opens": popover.text is "Wrong note", expected "Saturday session note|Confirm slot"',
+        props("popover-content", 'children: jsx("p", { children: "Wrong note" })'),
+      ],
+      [
+        "tooltip never shows",
+        'tooltip step "Tab to the tooltip trigger shows it": tooltip.count is "0", expected "1"',
+        props("tooltip-trigger", "onFocus: (e) => e.preventDefault()"),
+      ],
+      [
+        "tooltip still visible after Escape",
+        'tooltip step "Escape hides the tooltip": tooltip.count is "1", expected "0"',
+        props("tooltip-content", "onEscapeKeyDown: (e) => e.preventDefault()"),
+      ],
+      [
+        "tooltip shows wrong content",
+        'tooltip step "Tab to the tooltip trigger shows it": tooltip.text is "Wrong tip", expected "Reminder sent November 8"',
+        props("tooltip-content", 'children: "Wrong tip"'),
+      ],
+    ];
+    for (const [n, [label, want, mutate]] of popCases.entries()) {
+      let pmsg = "";
+      try {
+        await renderCopy(`popovers-${n}`, mutate, popRender, label);
+      } catch (e) {
+        pmsg = e instanceof Error ? e.message : String(e);
+      }
+      const pok = pmsg.includes(want);
+      console.log(`${pok ? "ok  " : "BAD "} popovers ${label}: "${pmsg}"`);
+      if (!pok) failures.push(`popovers ${label}`);
+    }
     // Packed package whose exports map lists a types file that is absent.
     const typesPkg = path.join(tmp, "types-pkg");
     mkdirSync(typesPkg);
@@ -1353,6 +1601,7 @@ try {
   else if (cmd === "client-form" && arg) await clientForm(arg, rest[0] ?? "");
   else if (cmd === "client-overlays" && arg) await clientOverlays(arg, rest[0] ?? "");
   else if (cmd === "client-menus" && arg) await clientMenus(arg, rest[0] ?? "");
+  else if (cmd === "client-popovers" && arg) await clientPopovers(arg, rest[0] ?? "");
   else if (cmd === "check-markup" && arg) assertMarkup(readFileSync(arg, "utf8"), rest);
   else
     throw new Error(
