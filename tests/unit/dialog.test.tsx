@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   Dialog,
@@ -18,6 +18,23 @@ function Example() {
         <DialogDescription>Change the title.</DialogDescription>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function WithOutsideControl() {
+  return (
+    <>
+      <button type="button">Outside control</button>
+      <Dialog>
+        <DialogTrigger>Edit task</DialogTrigger>
+        <DialogContent>
+          <DialogTitle>Edit task</DialogTitle>
+          <DialogDescription>Change the title.</DialogDescription>
+          <input aria-label="Task title" />
+          <button type="button">Save</button>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -63,5 +80,60 @@ describe("Dialog", () => {
     await user.click(close);
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  describe("focus trap", () => {
+    async function openDialog() {
+      const user = userEvent.setup();
+      render(<WithOutsideControl />);
+      await user.click(screen.getByRole("button", { name: "Edit task" }));
+      const dialog = screen.getByRole("dialog", { name: "Edit task" });
+      return {
+        user,
+        dialog,
+        outside: screen.getByRole("button", { name: "Outside control", hidden: true }),
+        field: screen.getByRole("textbox", { name: "Task title" }),
+        save: screen.getByRole("button", { name: "Save" }),
+        close: screen.getByRole("button", { name: "Close" }),
+      };
+    }
+
+    test("Tab cycles through the dialog controls and wraps without reaching outside", async () => {
+      const { user, dialog, outside, field, save, close } = await openDialog();
+      expect(document.activeElement).toBe(field);
+      for (const expected of [save, close, field, save, close, field]) {
+        await user.tab();
+        expect(document.activeElement).toBe(expected);
+        expect(dialog.contains(document.activeElement)).toBe(true);
+        expect(document.activeElement).not.toBe(outside);
+        expect(document.activeElement).not.toBe(document.body);
+      }
+    });
+
+    test("hides outside content and returns focus to the field when outside is focused", async () => {
+      const { dialog, outside, field } = await openDialog();
+      expect(document.activeElement).toBe(field);
+      // Only modal mode hides the rest of the page from assistive tech.
+      expect(outside.closest("[aria-hidden=true]")).not.toBeNull();
+      expect(dialog.closest("[aria-hidden=true]")).toBeNull();
+      act(() => {
+        outside.focus();
+      });
+      expect(document.activeElement).toBe(field);
+      expect(document.activeElement).not.toBe(outside);
+      expect(document.activeElement).not.toBe(document.body);
+    });
+
+    test("Shift+Tab cycles backwards and wraps without reaching outside", async () => {
+      const { user, dialog, outside, field, save, close } = await openDialog();
+      expect(document.activeElement).toBe(field);
+      for (const expected of [close, save, field, close, save, field]) {
+        await user.tab({ shift: true });
+        expect(document.activeElement).toBe(expected);
+        expect(dialog.contains(document.activeElement)).toBe(true);
+        expect(document.activeElement).not.toBe(outside);
+        expect(document.activeElement).not.toBe(document.body);
+      }
+    });
   });
 });
