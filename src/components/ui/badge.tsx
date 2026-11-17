@@ -3,6 +3,8 @@ import type { ComponentProps } from "react";
 import { cn } from "../../lib/utils";
 import { type StatusTone, statusDotClass, statusPillClass } from "./status-tone";
 
+const DEFAULT_BADGE_STATUS = "scheduled" satisfies StatusTone;
+
 const badgeVariants = cva(
   "inline-flex items-center gap-1.5 rounded-full font-semibold whitespace-nowrap",
   {
@@ -14,6 +16,7 @@ const badgeVariants = cva(
       },
     },
     defaultVariants: {
+      status: DEFAULT_BADGE_STATUS,
       size: "sm",
     },
   },
@@ -28,7 +31,7 @@ export type BadgeProps = ComponentProps<"span"> &
   };
 
 function Badge({ className, status, size, dot = true, children, ...props }: BadgeProps) {
-  const resolved = status ?? "scheduled";
+  const resolved = status ?? DEFAULT_BADGE_STATUS;
   return (
     <span
       data-slot="badge"

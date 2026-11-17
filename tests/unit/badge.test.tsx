@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
-import { Badge } from "../../src/components/ui/badge";
+import { Badge, badgeVariants } from "../../src/components/ui/badge";
 
 const tones = [
   { status: "done", pill: ["bg-success-soft", "text-success-foreground"], dot: "bg-success" },
@@ -34,18 +34,22 @@ describe("Badge", () => {
     expect(tokens(dot)).toContain("bg-scheduled");
   });
 
-  test("default status carries no other tone's pill or dot classes", () => {
-    render(<Badge>Plain</Badge>);
-    const badge = screen.getByText("Plain");
-    const classes = tokens(badge);
-    const dotClasses = tokens(badge.querySelector("[data-slot=badge-dot]"));
-    for (const other of tones) {
-      if (other.status === "scheduled") continue;
-      for (const token of other.pill) {
-        expect(classes).not.toContain(token);
-      }
-      expect(dotClasses).not.toContain(other.dot);
-    }
+  test("badgeVariants() with no args returns exactly the base, scheduled pill, and sm size classes", () => {
+    const classes = badgeVariants().split(/\s+/).filter(Boolean).sort();
+    const expected = [
+      "inline-flex",
+      "items-center",
+      "gap-1.5",
+      "rounded-full",
+      "font-semibold",
+      "whitespace-nowrap",
+      "bg-scheduled-soft",
+      "text-scheduled-foreground",
+      "h-6",
+      "px-2.5",
+      "text-asap-xs",
+    ].sort();
+    expect(classes).toEqual(expected);
   });
 
   test("dot={false} renders no dot", () => {
