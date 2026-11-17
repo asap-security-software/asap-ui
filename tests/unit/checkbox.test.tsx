@@ -19,6 +19,37 @@ describe("Checkbox", () => {
     expect(calls).toEqual([true]);
   });
 
+  test("Space turns it on then off, reporting each change and the exposed checked state", async () => {
+    const user = userEvent.setup();
+    const calls: Array<boolean | "indeterminate"> = [];
+    render(
+      <Checkbox
+        aria-label="Include parts"
+        onCheckedChange={(value) => {
+          calls.push(value);
+        }}
+      />,
+    );
+    const checkbox = screen.getByRole("checkbox", { name: "Include parts" });
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+    expect(checkbox.getAttribute("data-state")).toBe("unchecked");
+
+    await user.tab();
+    expect(document.activeElement).toBe(checkbox);
+
+    await user.keyboard(" ");
+    expect(calls).toEqual([true]);
+    expect(checkbox.getAttribute("aria-checked")).toBe("true");
+    expect(checkbox.getAttribute("data-state")).toBe("checked");
+    expect(document.activeElement).toBe(checkbox);
+
+    await user.keyboard(" ");
+    expect(calls).toEqual([true, false]);
+    expect(checkbox.getAttribute("aria-checked")).toBe("false");
+    expect(checkbox.getAttribute("data-state")).toBe("unchecked");
+    expect(document.activeElement).toBe(checkbox);
+  });
+
   test("exposes the mixed state", () => {
     render(<Checkbox aria-label="Some rows" checked="indeterminate" />);
     expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe("mixed");
