@@ -1036,7 +1036,8 @@ async function clientTabsTable(consumer: string, evidenceFile: string): Promise<
           .filter((t) => t.disabled)
           .map(txt)
           .join("|"),
-        // Radix keeps inactive panels in the DOM with `hidden`; only the shown ones count.
+        // TabsContent renders through Presence's render-prop form, so every panel stays in the DOM and
+        // inactive ones only get `hidden`; `forceMount` makes them all visible (the leftover-panel reject).
         "panel.count": String(document.querySelectorAll('[role="tabpanel"]:not([hidden])').length),
         "panel.note":
           document.querySelector('[role="tabpanel"]:not([hidden]) p')?.textContent ?? "",
@@ -1080,13 +1081,17 @@ async function clientTabsTable(consumer: string, evidenceFile: string): Promise<
     const log: Array<[string, Snap]> = [];
     const check = (step: string, expected: Snap, el: Element | null) => {
       const actual = snap();
+      const wrongFocus = () =>
+        new Error(
+          `tabs-table step "${step}": focus is on "${who(document.activeElement)}", expected "${who(el)}"`,
+        );
+      // Focus identity first, so a wrong element is reported as a focus failure, not a side effect.
+      // A missing expected element is reported by the field checks instead.
+      if (el && document.activeElement !== el) throw wrongFocus();
       for (const [k, want] of Object.entries(expected))
         if (actual[k] !== want)
           throw new Error(`tabs-table step "${step}": ${k} is "${actual[k]}", expected "${want}"`);
-      if (document.activeElement !== el)
-        throw new Error(
-          `tabs-table step "${step}": focus is on "${who(document.activeElement)}", expected "${who(el)}"`,
-        );
+      if (document.activeElement !== el) throw wrongFocus();
       log.push([step, actual]);
     };
     const settle = () => act(async () => void (await new Promise((r) => setTimeout(r, 30))));
@@ -1820,7 +1825,7 @@ async function selfCheck(): Promise<void> {
       ],
       [
         "focus on the wrong element after ArrowRight",
-        'tabs-table step "ArrowRight skips the disabled Archive tab": focus is "BODY", expected "Billing"',
+        'tabs-table step "ArrowRight skips the disabled Archive tab": focus is on "BODY", expected "Billing"',
         props(
           "tabs-trigger",
           'onFocus: (e) => { if (e.currentTarget.textContent === "Billing") e.currentTarget.blur(); }',
@@ -1838,7 +1843,7 @@ async function selfCheck(): Promise<void> {
       ],
       [
         "focus on the wrong element after Enter",
-        'tabs-table step "Enter sorts Customer ascending": focus is "BODY", expected "Customer"',
+        'tabs-table step "Enter sorts Customer ascending": focus is on "BODY", expected "Customer"',
         (s) =>
           s.replace("onClick: onSort,", "onClick: (e) => { onSort?.(); e.currentTarget.blur(); },"),
       ],
