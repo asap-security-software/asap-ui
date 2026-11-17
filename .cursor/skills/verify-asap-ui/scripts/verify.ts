@@ -26,7 +26,13 @@ const currentFile = path.join(runsDir, "CURRENT");
 const PKG = "@asap-security-software/ui";
 const EXPORTS = [PKG, `${PKG}/tokens`, `${PKG}/tailwind-preset`, `${PKG}/styles.css`];
 const BRAND = ["#a60e13", "#212121", "#3dc372", "#ff9e45", "#e44e56"];
-const FEATURES = ["published-exports", "consumer-styles", "render-primitives", "tokens-theme"];
+const FEATURES = [
+  "published-exports",
+  "consumer-styles",
+  "render-primitives",
+  "tokens-theme",
+  "form-controls",
+];
 
 type Current = { id: string; runDir: string; consumer: string; smoke: string; smokeSha256: string };
 
@@ -173,6 +179,171 @@ async function clientSelectText(
 function assertSelectValue(text: string, expected: string): void {
   if (text !== expected)
     throw new Error(`StatusSelect selected value is "${text}", expected "${expected}"`);
+}
+
+const FORM_OK = "FORM-OK";
+const TOKEN_A = "kestrel-7041"; // unique per step: neither is a prefix or substring of the other
+const TOKEN_B = "magnolia-2285";
+type Snap = Record<string, string>;
+
+/** Every expected key must `===` the observed one: no prefix, no includes. */
+function assertFormState(step: string, actual: Snap, expected: Snap): void {
+  for (const [k, want] of Object.entries(expected))
+    if (actual[k] !== want)
+      throw new Error(`form step "${step}": ${k} is "${actual[k]}", expected "${want}"`);
+}
+
+/** Fresh bun subprocess (same Radix import-time reason as the StatusSelect render). Throws on any
+ * failed assertion with the child's FAIL message. */
+function renderForm(consumer: string, evidenceFile = ""): string {
+  const r = Bun.spawnSync(["bun", self, "client-form", consumer, evidenceFile], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (r.exitCode !== 0) throw new Error(`form journey failed: ${r.stderr.toString().trim()}`);
+  const out = r.stdout.toString().trim();
+  if (out !== FORM_OK) throw new Error("form journey did not finish");
+  return out;
+}
+
+/** Client journey for Input, Checkbox, Switch at size="touch", driven like a user (focus, type,
+ * click, Space). All modules and the DOM come from the consumer; asserts after every step. */
+async function clientForm(consumer: string, evidenceFile: string): Promise<void> {
+  const { GlobalRegistrator } = await load(consumer, "@happy-dom/global-registrator");
+  GlobalRegistrator.register({ url: "http://localhost:3000/" });
+  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  try {
+    const { createElement: h, act } = await load(consumer, "react");
+    const { createRoot } = await load(consumer, "react-dom/client");
+    const ui = await load(consumer, PKG);
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const app = createRoot(host);
+    // Controlled Input: onChange stores the typed text and re-renders the same tree.
+    const draw = (text: string) =>
+      h(
+        "div",
+        null,
+        h("label", { htmlFor: "f-name" }, "Full name"),
+        h(ui.Input, {
+          id: "f-name",
+          size: "touch",
+          value: text,
+          onChange: (e: { target: { value: string } }) => app.render(draw(e.target.value)),
+        }),
+        h("label", { htmlFor: "f-terms" }, "Accept terms"),
+        h(ui.Checkbox, { id: "f-terms", size: "touch" }),
+        h("label", { htmlFor: "f-alerts" }, "Email alerts"),
+        h(ui.Switch, { id: "f-alerts", size: "touch" }),
+      );
+    await act(async () => app.render(draw("")));
+    // The control element itself (not page-wide text) must carry the documented touch class.
+    const pick = (slot: string, touch: string): HTMLElement => {
+      const found = host.querySelectorAll(`[data-slot="${slot}"]`);
+      const el = found[0];
+      if (found.length !== 1 || !(el instanceof HTMLElement))
+        throw new Error(`${slot} control not rendered: found ${found.length}, expected 1`);
+      if (!el.classList.contains(touch))
+        throw new Error(`${slot} lacks ${touch} at size="touch": class="${el.className}"`);
+      return el;
+    };
+    const input = pick("input", "min-h-touch");
+    const checkbox = pick("checkbox", "size-touch");
+    const sw = pick("switch", "size-touch");
+    if (!(input instanceof HTMLInputElement)) throw new Error("input control is not an <input>");
+    const nameOf = (el: HTMLElement) =>
+      el.getAttribute("aria-label") ??
+      host.querySelector(`label[for="${el.id}"]`)?.textContent ??
+      "";
+    const toggles: Array<[string, HTMLElement]> = [
+      ["checkbox", checkbox],
+      ["switch", sw],
+    ];
+    const snap = (): Snap => {
+      const s: Snap = { "input.value": input.value, "input.type": input.type };
+      s["input.name"] = nameOf(input);
+      for (const [k, el] of toggles)
+        for (const a of ["role", "aria-checked", "data-state"])
+          s[`${k}.${a}`] = el.getAttribute(a) ?? "";
+      for (const [k, el] of toggles) s[`${k}.name`] = nameOf(el);
+      return s;
+    };
+    const flip = (k: string, on: boolean): Snap => ({
+      [`${k}.aria-checked`]: String(on),
+      [`${k}.data-state`]: on ? "checked" : "unchecked",
+    });
+    const setValue = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set;
+    if (!setValue) throw new Error("no native input value setter");
+    const typeText = async (text: string) => {
+      // Select-all then type: the first key replaces the old value, each key fires an input event.
+      for (let i = 1; i <= text.length; i++)
+        await act(async () => {
+          setValue.call(input, text.slice(0, i));
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+        });
+    };
+    const click = (el: HTMLElement) => async () => {
+      await act(async () => el.click());
+    };
+    const space = (el: HTMLElement) => async () => {
+      await act(async () => {
+        const key = (type: string) =>
+          el.dispatchEvent(
+            new KeyboardEvent(type, { key: " ", code: "Space", bubbles: true, cancelable: true }),
+          );
+        // happy-dom lacks the browser default: Space keyup on a button clicks it unless cancelled.
+        if (key("keydown") && key("keyup")) el.click();
+      });
+    };
+    let want: Snap = {
+      "input.value": "",
+      "input.type": "text",
+      "input.name": "Full name",
+      "checkbox.role": "checkbox",
+      "checkbox.name": "Accept terms",
+      "switch.role": "switch",
+      "switch.name": "Email alerts",
+      ...flip("checkbox", false),
+      ...flip("switch", false),
+    };
+    assertFormState("initial", snap(), want);
+    const steps: Array<[string, HTMLElement, () => Promise<void>, Snap]> = [
+      ["type first value", input, () => typeText(TOKEN_A), { "input.value": TOKEN_A }],
+      ["type second value", input, () => typeText(TOKEN_B), { "input.value": TOKEN_B }],
+      ["click checkbox", checkbox, click(checkbox), flip("checkbox", true)],
+      ["space on checkbox", checkbox, space(checkbox), flip("checkbox", false)],
+      ["click switch", sw, click(sw), flip("switch", true)],
+      ["space on switch", sw, space(sw), flip("switch", false)],
+    ];
+    const log: Array<[string, Snap]> = [["initial", snap()]];
+    for (const [label, el, action, patch] of steps) {
+      el.focus(); // a user clicks or tabs onto the control first
+      await action();
+      want = { ...want, ...patch };
+      assertFormState(label, snap(), want);
+      const active = document.activeElement;
+      if (active !== el)
+        throw new Error(
+          `form step "${label}": focus is on "${active?.getAttribute("data-slot") ?? active?.tagName}", expected "${el.dataset.slot}"`,
+        );
+      log.push([label, snap()]);
+    }
+    if (evidenceFile)
+      writeFileSync(
+        evidenceFile,
+        JSON.stringify(
+          { steps: log, html: [input, checkbox, sw].map((e) => e.outerHTML) },
+          null,
+          2,
+        ),
+      );
+    await act(async () => app.unmount());
+    console.log(FORM_OK);
+  } finally {
+    Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+    await GlobalRegistrator.unregister();
+  }
 }
 
 /** Offline: react, react-dom, tailwindcss, radix etc. come from this repo's node_modules. */
@@ -337,6 +508,8 @@ async function drive(feature: string): Promise<void> {
     ev("theme-harbor.css", css);
     assertMarkup(base, BRAND);
     assertMarkup(css, ['[data-asap-theme="harbor"]', "#0b3d91", "#082f73"]);
+  } else if (feature === "form-controls") {
+    renderForm(c.consumer, path.join(c.runDir, "evidence", "form-controls-client.json"));
   } else {
     throw new Error(`unknown feature ${feature}; one of ${FEATURES.join(", ")}`);
   }
@@ -486,6 +659,78 @@ async function selfCheck(): Promise<void> {
       console.log(`${sok ? "ok  " : "BAD "} StatusSelect ${label}: "${smsg}"`);
       if (!sok) failures.push(label);
     }
+    // form-controls: the same client journey (clientForm assertions) against mutated consumers.
+    const formRender = async (c: string) => renderForm(c);
+    await renderCopy("form-ok", null, formRender); // control: unmutated journey passes
+    const props = (slot: string, extra: string) => (s: string) =>
+      s.replace(
+        new RegExp(`("data-slot": "${slot}"[\\s\\S]*?)\\.\\.\\.props`),
+        `$1...props, ${extra}`,
+      );
+    const leftover = `value: ((v) => { const p = globalThis.__p ?? ""; if (!v.startsWith(p)) globalThis.__k = p; globalThis.__p = v; return (globalThis.__k ?? "") + v; })(String(props.value ?? ""))`;
+    const formCases: Array<[string, string, (s: string) => string]> = [
+      [
+        "missing control",
+        "checkbox control not rendered",
+        (s) => s.replace('"data-slot": "checkbox"', '"data-slot": "checkbox-gone"'),
+      ],
+      [
+        "Input touch class removed",
+        "input lacks min-h-touch",
+        (s) => s.replace('touch: "min-h-touch rounded-lg', 'touch: "rounded-lg'),
+      ],
+      [
+        "Checkbox touch class removed",
+        "checkbox lacks size-touch",
+        (s) => s.replace('"size-touch" : "size-5"', '"size-5" : "size-5"'),
+      ],
+      [
+        "Switch touch class removed",
+        "switch lacks size-touch",
+        (s) => s.replace('"size-touch" : "h-6 w-11"', '"h-6 w-11" : "h-6 w-11"'),
+      ],
+      [
+        "wrong Input value",
+        'input.value is "stale"',
+        props("input", 'value: props.value === "" ? "" : "stale"'),
+      ],
+      [
+        "leftover value from previous step",
+        `input.value is "${TOKEN_A}${TOKEN_B}", expected "${TOKEN_B}"`,
+        props("input", leftover),
+      ],
+      [
+        "Checkbox never toggles",
+        'checkbox.aria-checked is "false", expected "true"',
+        props("checkbox", "checked: false"),
+      ],
+      [
+        "Switch never toggles",
+        'switch.aria-checked is "false", expected "true"',
+        props("switch", "checked: false"),
+      ],
+      [
+        "wrong control (Checkbox is a switch)",
+        'checkbox.role is "switch", expected "checkbox"',
+        props("checkbox", 'role: "switch"'),
+      ],
+      [
+        "lost focus after Switch click",
+        'focus is on "BODY", expected "switch"',
+        props("switch", "onClick: (e) => e.currentTarget.blur()"),
+      ],
+    ];
+    for (const [label, want, mutate] of formCases) {
+      let fmsg = "";
+      try {
+        await renderCopy(`form-${label.split(" ")[0]}-${label.length}`, mutate, formRender, label);
+      } catch (e) {
+        fmsg = e instanceof Error ? e.message : String(e);
+      }
+      const fok = fmsg.includes(want);
+      console.log(`${fok ? "ok  " : "BAD "} form-controls ${label}: "${fmsg}"`);
+      if (!fok) failures.push(`form-controls ${label}`);
+    }
     // Packed package whose exports map lists a types file that is absent.
     const typesPkg = path.join(tmp, "types-pkg");
     mkdirSync(typesPkg);
@@ -567,6 +812,7 @@ try {
   else if (cmd === "self-check") await selfCheck();
   else if (cmd === "client-select" && arg)
     console.log(SELECT_TEXT + (await clientSelectText(arg, rest[0] ?? "", rest[1] ?? "")));
+  else if (cmd === "client-form" && arg) await clientForm(arg, rest[0] ?? "");
   else if (cmd === "check-markup" && arg) assertMarkup(readFileSync(arg, "utf8"), rest);
   else
     throw new Error(
