@@ -14,7 +14,6 @@ const badgeVariants = cva(
       },
     },
     defaultVariants: {
-      status: "scheduled",
       size: "sm",
     },
   },

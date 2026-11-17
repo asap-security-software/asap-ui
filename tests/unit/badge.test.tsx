@@ -34,6 +34,20 @@ describe("Badge", () => {
     expect(tokens(dot)).toContain("bg-scheduled");
   });
 
+  test("default status carries no other tone's pill or dot classes", () => {
+    render(<Badge>Plain</Badge>);
+    const badge = screen.getByText("Plain");
+    const classes = tokens(badge);
+    const dotClasses = tokens(badge.querySelector("[data-slot=badge-dot]"));
+    for (const other of tones) {
+      if (other.status === "scheduled") continue;
+      for (const token of other.pill) {
+        expect(classes).not.toContain(token);
+      }
+      expect(dotClasses).not.toContain(other.dot);
+    }
+  });
+
   test("dot={false} renders no dot", () => {
     render(<Badge dot={false}>No dot</Badge>);
     expect(screen.getByText("No dot").querySelector("[data-slot=badge-dot]")).toBeNull();
