@@ -30,7 +30,8 @@ describe("toast", () => {
     toast("Saved", { description: "Two readers updated" });
     await screen.findByText("Saved");
     const region = screen.getByRole("region", { name: /^Notifications/ });
-    expect(within(region).getByText("Saved").textContent).toBe("Saved");
-    expect(within(region).getByText("Two readers updated").textContent).toBe("Two readers updated");
+    // getByText matches the full normalized text and throws if it is missing.
+    within(region).getByText("Saved");
+    within(region).getByText("Two readers updated");
   });
 });
