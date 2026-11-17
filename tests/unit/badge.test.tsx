@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { render, screen } from "@testing-library/react";
-import { Badge } from "../../src/components/ui/badge";
+import { Badge, badgeVariants } from "../../src/components/ui/badge";
 
 const tones = [
   { status: "done", pill: ["bg-success-soft", "text-success-foreground"], dot: "bg-success" },
@@ -32,6 +32,24 @@ describe("Badge", () => {
     const dot = badge.querySelector("[data-slot=badge-dot]");
     expect(dot).not.toBeNull();
     expect(tokens(dot)).toContain("bg-scheduled");
+  });
+
+  test("badgeVariants() with no args returns exactly the base, scheduled pill, and sm size classes", () => {
+    const classes = badgeVariants().split(/\s+/).filter(Boolean).sort();
+    const expected = [
+      "inline-flex",
+      "items-center",
+      "gap-1.5",
+      "rounded-full",
+      "font-semibold",
+      "whitespace-nowrap",
+      "bg-scheduled-soft",
+      "text-scheduled-foreground",
+      "h-6",
+      "px-2.5",
+      "text-asap-xs",
+    ].sort();
+    expect(classes).toEqual(expected);
   });
 
   test("dot={false} renders no dot", () => {
