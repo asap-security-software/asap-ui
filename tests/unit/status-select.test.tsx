@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import {
@@ -67,6 +67,22 @@ function Harness() {
   );
 }
 
+function TrackedHarness({ onChange }: { onChange: (value: string) => void }) {
+  const [value, setValue] = useState("scheduled");
+  return (
+    <StatusSelect
+      aria-label="Status"
+      value={value}
+      options={options}
+      allowed={["progress"]}
+      onValueChange={(next) => {
+        onChange(next);
+        setValue(next);
+      }}
+    />
+  );
+}
+
 function EmptyHarness() {
   const [value, setValue] = useState("");
   return (
@@ -128,4 +144,45 @@ describe("StatusSelect", () => {
     await user.click(screen.getByRole("option", { name: "In progress" }));
     expect(screen.getByRole("combobox", { name: "Status" }).textContent).toContain("In progress");
   });
+
+  for (const key of ["{Enter}", "{ }"]) {
+    test(`opening with ${key} and choosing with the keyboard offers and picks only the allowed status`, async () => {
+      const user = userEvent.setup();
+      const changes: string[] = [];
+      render(<TrackedHarness onChange={(next) => changes.push(next)} />);
+
+      await user.tab();
+      const trigger = screen.getByRole("combobox", { name: "Status" });
+      expect(document.activeElement).toBe(trigger);
+      expect(trigger.textContent).toBe("Scheduled");
+
+      await user.keyboard(key);
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
+      const scheduled = screen.getByRole("option", { name: "Scheduled" });
+      const progress = screen.getByRole("option", { name: "In progress" });
+      await waitFor(() => expect(document.activeElement).toBe(scheduled));
+      expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual([
+        "Scheduled",
+        "In progress",
+      ]);
+      expect(screen.queryByRole("option", { name: "Done" })).toBeNull();
+      expect(screen.queryByRole("option", { name: "On hold" })).toBeNull();
+      expect(scheduled.getAttribute("data-state")).toBe("checked");
+      expect(progress.getAttribute("data-state")).toBe("unchecked");
+
+      await user.keyboard("{ArrowDown}");
+      expect(document.activeElement).toBe(progress);
+      expect(changes).toEqual([]);
+
+      await user.keyboard("{Enter}");
+      expect(changes).toEqual(["progress"]);
+      expect(screen.queryByRole("listbox")).toBeNull();
+      const closedTrigger = screen.getByRole("combobox", { name: "Status" });
+      expect(closedTrigger.textContent).toBe("In progress");
+      // In this harness "progress" has no further allowed move, so the field
+      // locks itself (disabled) after the change and the browser drops focus.
+      expect(closedTrigger.hasAttribute("disabled")).toBe(true);
+      await waitFor(() => expect(document.activeElement).toBe(document.body));
+    });
+  }
 });
