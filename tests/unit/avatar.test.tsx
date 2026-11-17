@@ -9,7 +9,7 @@ describe("Avatar", () => {
         <AvatarFallback>LT</AvatarFallback>
       </Avatar>,
     );
-    expect(screen.getByText("LT")).toBeTruthy();
+    expect(screen.getByText("LT").textContent).toBe("LT");
   });
 
   test("keeps the photo name", () => {
@@ -20,6 +20,24 @@ describe("Avatar", () => {
       </Avatar>,
     );
     expect(screen.getByRole("img", { name: "Lead tech" })).toBeTruthy();
+  });
+
+  test("shows initials and no image when the photo reports an error status", async () => {
+    const statuses: string[] = [];
+    const { container } = render(
+      <Avatar>
+        <AvatarImage
+          alt="Lead tech"
+          src="http://127.0.0.1:1/missing.png"
+          onLoadingStatusChange={(status) => statuses.push(status)}
+        />
+        <AvatarFallback delayMs={0}>LT</AvatarFallback>
+      </Avatar>,
+    );
+    expect((await screen.findByText("LT")).textContent).toBe("LT");
+    expect(statuses.at(-1)).toBe("error");
+    expect(screen.queryByRole("img", { name: "Lead tech" })).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
   });
 
   test("touch size is the 52px target", () => {
