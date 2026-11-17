@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   Dialog,
@@ -108,6 +108,20 @@ describe("Dialog", () => {
         expect(document.activeElement).not.toBe(outside);
         expect(document.activeElement).not.toBe(document.body);
       }
+    });
+
+    test("hides outside content and returns focus to the field when outside is focused", async () => {
+      const { dialog, outside, field } = await openDialog();
+      expect(document.activeElement).toBe(field);
+      // Only modal mode hides the rest of the page from assistive tech.
+      expect(outside.closest("[aria-hidden=true]")).not.toBeNull();
+      expect(dialog.closest("[aria-hidden=true]")).toBeNull();
+      act(() => {
+        outside.focus();
+      });
+      expect(document.activeElement).toBe(field);
+      expect(document.activeElement).not.toBe(outside);
+      expect(document.activeElement).not.toBe(document.body);
     });
 
     test("Shift+Tab cycles backwards and wraps without reaching outside", async () => {
