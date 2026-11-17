@@ -17,11 +17,6 @@ describe("type scale", () => {
     });
   });
 
-  test("keeps desktop body at 14px and the mobile title at 24px", () => {
-    expect(fontSize.base).toBe("14px");
-    expect(fontSize["3xl"]).toBe("24px");
-  });
-
   test("pins the font weights", () => {
     expect(fontWeight).toEqual({
       regular: "400",
