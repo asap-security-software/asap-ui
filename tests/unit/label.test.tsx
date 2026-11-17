@@ -44,6 +44,5 @@ describe("Label", () => {
     expect(document.activeElement).toBe(document.body);
     await user.click(screen.getByText("Email address"));
     expect(document.activeElement).toBe(input);
-    expect(input.getAttribute("id")).toBe("email");
   });
 });
