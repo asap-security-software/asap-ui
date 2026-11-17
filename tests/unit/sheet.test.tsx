@@ -52,12 +52,13 @@ describe("Sheet", () => {
     expect(document.querySelector("[data-slot=sheet-handle]")).toBeNull();
   });
 
-  test("top sheet sets data-side and animation class", async () => {
+  test("top sheet sets data-side, animation class and has no handle", async () => {
     const user = userEvent.setup();
     render(<Example side="top" />);
     await user.click(screen.getByRole("button", { name: "Open task" }));
     const dialog = screen.getByRole("dialog");
     expect(dialog.getAttribute("data-side")).toBe("top");
     expect(dialog.className).toContain("animate-drawer-top");
+    expect(document.querySelector("[data-slot=sheet-handle]")).toBeNull();
   });
 });
