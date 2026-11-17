@@ -23,4 +23,19 @@ describe("Tooltip", () => {
     await user.tab();
     expect((await screen.findByRole("tooltip")).textContent).toContain("November 8");
   });
+
+  test("shows the note on hover", async () => {
+    const user = userEvent.setup();
+    render(
+      <TooltipProvider delayDuration={0}>
+        <Tooltip>
+          <TooltipTrigger>Due date</TooltipTrigger>
+          <TooltipContent>November 8</TooltipContent>
+        </Tooltip>
+      </TooltipProvider>,
+    );
+    expect(screen.queryByRole("tooltip")).toBeNull();
+    await user.hover(screen.getByRole("button", { name: "Due date" }));
+    expect((await screen.findByRole("tooltip")).textContent).toContain("November 8");
+  });
 });
