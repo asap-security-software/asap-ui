@@ -8,6 +8,7 @@ Features a consumer touches, from the public exports (`.`, `./tokens`, `./tailwi
 | Consumer styles via `@source`                       | `consumer-styles.md`   | `consumer-styles`   |
 | Primitives: Button, Badge, StatusPill, StatusSelect | `render-primitives.md` | `render-primitives` |
 | Tokens and theming                                  | `tokens-theme.md`      | `tokens-theme`      |
+| Form controls: Input, Checkbox, Switch (touch)      | `form-controls.md`     | `form-controls`     |
 
 `render-primitives` also client-renders `StatusSelect` (happy-dom) to prove its selected value; static markup cannot show that label.
 
