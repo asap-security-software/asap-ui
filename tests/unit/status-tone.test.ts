@@ -6,12 +6,6 @@ describe("status tones", () => {
     expect(statusTones).toEqual(["done", "progress", "scheduled", "warning", "danger"]);
   });
 
-  test("pill and dot maps have exactly the tone keys", () => {
-    const tones = [...statusTones].sort();
-    expect(Object.keys(statusPillClass).sort()).toEqual(tones);
-    expect(Object.keys(statusDotClass).sort()).toEqual(tones);
-  });
-
   test("pins the pill classes for each tone", () => {
     expect(statusPillClass).toEqual({
       done: "bg-success-soft text-success-foreground",
