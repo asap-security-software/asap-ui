@@ -5,7 +5,9 @@ import {
   nextSortDirection,
   Table,
   TableBody,
+  TableCaption,
   TableCell,
+  TableFooter,
   TableHead,
   TableHeader,
   TableRow,
@@ -65,6 +67,66 @@ describe("Table", () => {
     expect(screen.getByRole("columnheader", { name: "Task" }).hasAttribute("aria-sort")).toBe(
       false,
     );
+  });
+
+  test("sort=desc sets aria-sort to descending", () => {
+    render(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead sortable sort="desc" onSort={() => {}}>
+              Due
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+      </Table>,
+    );
+    expect(screen.getByRole("columnheader", { name: "Due" }).getAttribute("aria-sort")).toBe(
+      "descending",
+    );
+  });
+
+  test("sortable column with no active sort has aria-sort none", () => {
+    render(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead sortable onSort={() => {}}>
+              Due
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+      </Table>,
+    );
+    expect(screen.getByRole("columnheader", { name: "Due" }).getAttribute("aria-sort")).toBe(
+      "none",
+    );
+  });
+
+  test("TableCaption renders its text with the table-caption slot", () => {
+    render(
+      <Table>
+        <TableCaption>Open tasks</TableCaption>
+      </Table>,
+    );
+    const caption = screen.getByText("Open tasks");
+    expect(caption.getAttribute("data-slot")).toBe("table-caption");
+    expect(caption.textContent).toBe("Open tasks");
+  });
+
+  test("TableFooter renders its text with the table-footer slot", () => {
+    render(
+      <Table>
+        <TableFooter>
+          <TableRow>
+            <TableCell>Total: 3</TableCell>
+          </TableRow>
+        </TableFooter>
+      </Table>,
+    );
+    const footer = screen.getByText("Total: 3").closest("tfoot");
+    expect(footer?.getAttribute("data-slot")).toBe("table-footer");
+    expect(footer?.textContent).toBe("Total: 3");
   });
 
   test("touch rows use the 52px target", () => {
