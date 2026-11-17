@@ -54,6 +54,40 @@ describe("Table", () => {
     expect(calls).toEqual(["due"]);
   });
 
+  test.each([
+    ["Enter", "{Enter}"],
+    ["Space", " "],
+  ])("%s on the focused sort button calls onSort and keeps focus", async (_name, key) => {
+    const user = userEvent.setup();
+    const calls: string[] = [];
+    render(
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead
+              sortable
+              sort="asc"
+              onSort={() => {
+                calls.push("due");
+              }}
+            >
+              Due
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+      </Table>,
+    );
+    const header = screen.getByRole("columnheader", { name: "Due" });
+    const button = screen.getByRole("button", { name: "Due" });
+    button.focus();
+    expect(document.activeElement).toBe(button);
+    expect(calls).toEqual([]);
+    await user.keyboard(key);
+    expect(calls).toEqual(["due"]);
+    expect(document.activeElement).toBe(button);
+    expect(header.getAttribute("aria-sort")).toBe("ascending");
+  });
+
   test("leaves aria-sort off a column that cannot sort", () => {
     render(
       <Table>
