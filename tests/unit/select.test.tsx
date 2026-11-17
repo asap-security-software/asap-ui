@@ -66,7 +66,7 @@ describe("Select", () => {
       expect(document.activeElement).toBe(trigger);
 
       await user.keyboard(key);
-      expect(screen.getByRole("listbox")).toBeTruthy();
+      expect(trigger.getAttribute("aria-expanded")).toBe("true");
       const scheduled = screen.getByRole("option", { name: "Scheduled" });
       const progress = screen.getByRole("option", { name: "In progress" });
       await waitFor(() => expect(document.activeElement).toBe(scheduled));
