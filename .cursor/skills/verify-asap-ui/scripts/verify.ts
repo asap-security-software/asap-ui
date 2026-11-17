@@ -423,8 +423,9 @@ async function selfCheck(): Promise<void> {
     // Throwaway consumer under tmp whose Button defaults to submit; src/ and dist/ stay untouched.
     const renderCopy = async (
       name: string,
-      mutate: boolean,
+      mutate: ((src: string) => string) | null,
       render: (consumer: string) => Promise<string> = renderTaskAction,
+      what = "Button default",
     ) => {
       const consumer = path.join(tmp, name);
       const pkg = path.join(consumer, "node_modules", PKG);
@@ -434,16 +435,18 @@ async function selfCheck(): Promise<void> {
       linkDeps(consumer);
       if (mutate) {
         const before = readFileSync(path.join(pkg, "dist/index.js"), "utf8");
-        const after = before.replace(/\?\?\s*"button"/, '?? "submit"');
-        if (after === before) throw new Error("Button default not found in dist/index.js");
+        const after = mutate(before);
+        if (after === before) throw new Error(`${what} not found in dist/index.js`);
         writeFileSync(path.join(pkg, "dist/index.js"), after);
       }
       return await render(consumer);
     };
-    assertPrimitives(await renderCopy("button-ok", false));
+    assertPrimitives(await renderCopy("button-ok", null));
     let msg = "";
     try {
-      assertPrimitives(await renderCopy("button-submit", true));
+      assertPrimitives(
+        await renderCopy("button-submit", (s) => s.replace(/\?\?\s*"button"/, '?? "submit"')),
+      );
     } catch (e) {
       msg = e instanceof Error ? e.message : String(e);
     }
@@ -452,23 +455,29 @@ async function selfCheck(): Promise<void> {
     if (!ok) failures.push("button submit mutation");
     // Client-render StatusSelect value: same assertSelectValue as the journey (control, wrong, missing).
     assertSelectValue(
-      await renderCopy("select-ok", false, (c) => renderSelectTrigger(c, "progress")),
+      await renderCopy("select-ok", null, (c) => renderSelectTrigger(c, "progress")),
       "In progress",
     );
-    const selectCases: Array<[string, string | null, string]> = [
-      ["wrong selected value", "done", '"Done"'],
-      ["missing selected value (placeholder shown)", "", '"Choose a status"'],
-      ["empty trigger text", null, '""'], // null: no render, assert on empty text directly
+    // SelectValue swapped for an empty span: the real client render has an empty trigger.
+    const emptySelectValue = (s: string) =>
+      s.replace(
+        /function SelectValue\(props\) \{\s*return [^;]*;\s*\}/,
+        'function SelectValue() { return jsx("span", { "data-slot": "select-value" }); }',
+      );
+    const selectCases: Array<[string, string, string, ((s: string) => string) | null]> = [
+      ["wrong selected value", "done", '"Done"', null],
+      ["missing selected value (placeholder shown)", "", '"Choose a status"', null],
+      ["empty trigger text", "progress", '""', emptySelectValue],
     ];
-    for (const [label, value, want] of selectCases) {
+    for (const [label, value, want, mutate] of selectCases) {
       let smsg = "";
       try {
-        const text =
-          value === null
-            ? ""
-            : await renderCopy(`select-${value || "empty"}`, false, (c) =>
-                renderSelectTrigger(c, value),
-              );
+        const text = await renderCopy(
+          `select-${label.split(" ")[0]}`,
+          mutate,
+          (c) => renderSelectTrigger(c, value),
+          "SelectValue",
+        );
         assertSelectValue(text, "In progress");
       } catch (e) {
         smsg = e instanceof Error ? e.message : String(e);
