@@ -106,6 +106,75 @@ async function renderTaskAction(consumer: string): Promise<string> {
   );
 }
 
+/** Client render (happy-dom + react-dom/client + act) of a StatusSelect alone; returns the visible
+ * text of its combobox trigger. renderToStaticMarkup cannot show it: the select-value label is
+ * client-only. Everything is resolved from the consumer; the DOM is registered only for the call. */
+async function renderSelectTrigger(
+  consumer: string,
+  value: string,
+  evidenceFile = "",
+): Promise<string> {
+  // Fresh process: Radix picks its layout-effect hook at import time from globalThis.document, so
+  // modules already loaded for the server render in this process would never fill the label.
+  const r = Bun.spawnSync(["bun", self, "client-select", consumer, value, evidenceFile], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (r.exitCode !== 0) throw new Error(`client render failed: ${r.stderr.toString().trim()}`);
+  const line = r.stdout
+    .toString()
+    .split("\n")
+    .find((l) => l.startsWith(SELECT_TEXT));
+  if (line === undefined) throw new Error("client render printed no trigger text");
+  return line.slice(SELECT_TEXT.length);
+}
+
+const SELECT_TEXT = "SELECT-TEXT:";
+
+async function clientSelectText(
+  consumer: string,
+  value: string,
+  evidenceFile: string,
+): Promise<string> {
+  const { GlobalRegistrator } = await load(consumer, "@happy-dom/global-registrator");
+  GlobalRegistrator.register({ url: "http://localhost:3000/" });
+  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  try {
+    const { createElement: h, act } = await load(consumer, "react");
+    const { createRoot } = await load(consumer, "react-dom/client");
+    const ui = await load(consumer, PKG);
+    const options = [
+      { value: "progress", label: "In progress", tone: "progress" },
+      { value: "done", label: "Done", tone: "done" },
+    ];
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    await act(async () => {
+      root.render(
+        h(ui.StatusSelect, { value, options, allowed: ["done"], onValueChange: () => {} }),
+      );
+    });
+    const trigger = host.querySelector('[data-slot="select-trigger"][role="combobox"]');
+    if (!trigger) throw new Error("StatusSelect combobox trigger not rendered in client render");
+    if (evidenceFile) writeFileSync(evidenceFile, trigger.outerHTML);
+    const text = (trigger.textContent ?? "").replace(/\s+/g, " ").trim();
+    await act(async () => root.unmount());
+    return text;
+  } finally {
+    Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+    await GlobalRegistrator.unregister();
+  }
+}
+
+/** The trigger's whole visible text must equal the selected label: no prefix, no page-wide match
+ * (StatusPill also shows "In progress"). */
+function assertSelectValue(text: string, expected: string): void {
+  if (text !== expected)
+    throw new Error(`StatusSelect selected value is "${text}", expected "${expected}"`);
+}
+
 /** Offline: react, react-dom, tailwindcss, radix etc. come from this repo's node_modules. */
 function linkDeps(consumer: string): void {
   for (const name of readdirSync(path.join(root, "node_modules"))) {
@@ -254,6 +323,8 @@ async function drive(feature: string): Promise<void> {
     const markup = await renderTaskAction(c.consumer);
     ev("render-primitives.html", markup);
     assertPrimitives(markup);
+    const trigger = path.join(c.runDir, "evidence", "status-select-client.html");
+    assertSelectValue(await renderSelectTrigger(c.consumer, "progress", trigger), "In progress");
   } else if (feature === "tokens-theme") {
     const t = await load(c.consumer, `${PKG}/tokens`);
     const harbor = t.defineTheme({
@@ -350,7 +421,12 @@ async function selfCheck(): Promise<void> {
       "render output is empty",
     );
     // Throwaway consumer under tmp whose Button defaults to submit; src/ and dist/ stay untouched.
-    const renderCopy = async (name: string, mutate: boolean) => {
+    const renderCopy = async (
+      name: string,
+      mutate: ((src: string) => string) | null,
+      render: (consumer: string) => Promise<string> = renderTaskAction,
+      what = "Button default",
+    ) => {
       const consumer = path.join(tmp, name);
       const pkg = path.join(consumer, "node_modules", PKG);
       mkdirSync(pkg, { recursive: true });
@@ -359,22 +435,57 @@ async function selfCheck(): Promise<void> {
       linkDeps(consumer);
       if (mutate) {
         const before = readFileSync(path.join(pkg, "dist/index.js"), "utf8");
-        const after = before.replace(/\?\?\s*"button"/, '?? "submit"');
-        if (after === before) throw new Error("Button default not found in dist/index.js");
+        const after = mutate(before);
+        if (after === before) throw new Error(`${what} not found in dist/index.js`);
         writeFileSync(path.join(pkg, "dist/index.js"), after);
       }
-      return await renderTaskAction(consumer);
+      return await render(consumer);
     };
-    assertPrimitives(await renderCopy("button-ok", false));
+    assertPrimitives(await renderCopy("button-ok", null));
     let msg = "";
     try {
-      assertPrimitives(await renderCopy("button-submit", true));
+      assertPrimitives(
+        await renderCopy("button-submit", (s) => s.replace(/\?\?\s*"button"/, '?? "submit"')),
+      );
     } catch (e) {
       msg = e instanceof Error ? e.message : String(e);
     }
     const ok = msg.includes('type="button"');
     console.log(`${ok ? "ok  " : "BAD "} mutation: Button defaults to submit: "${msg}"`);
     if (!ok) failures.push("button submit mutation");
+    // Client-render StatusSelect value: same assertSelectValue as the journey (control, wrong, missing).
+    assertSelectValue(
+      await renderCopy("select-ok", null, (c) => renderSelectTrigger(c, "progress")),
+      "In progress",
+    );
+    // SelectValue swapped for an empty span: the real client render has an empty trigger.
+    const emptySelectValue = (s: string) =>
+      s.replace(
+        /function SelectValue\(props\) \{\s*return [^;]*;\s*\}/,
+        'function SelectValue() { return jsx("span", { "data-slot": "select-value" }); }',
+      );
+    const selectCases: Array<[string, string, string, ((s: string) => string) | null]> = [
+      ["wrong selected value", "done", '"Done"', null],
+      ["missing selected value (placeholder shown)", "", '"Choose a status"', null],
+      ["empty trigger text", "progress", '""', emptySelectValue],
+    ];
+    for (const [label, value, want, mutate] of selectCases) {
+      let smsg = "";
+      try {
+        const text = await renderCopy(
+          `select-${label.split(" ")[0]}`,
+          mutate,
+          (c) => renderSelectTrigger(c, value),
+          "SelectValue",
+        );
+        assertSelectValue(text, "In progress");
+      } catch (e) {
+        smsg = e instanceof Error ? e.message : String(e);
+      }
+      const sok = smsg.includes(`selected value is ${want}`);
+      console.log(`${sok ? "ok  " : "BAD "} StatusSelect ${label}: "${smsg}"`);
+      if (!sok) failures.push(label);
+    }
     // Packed package whose exports map lists a types file that is absent.
     const typesPkg = path.join(tmp, "types-pkg");
     mkdirSync(typesPkg);
@@ -454,6 +565,8 @@ try {
   else if (cmd === "cleanup") cleanup();
   else if (cmd === "prove") await prove(arg);
   else if (cmd === "self-check") await selfCheck();
+  else if (cmd === "client-select" && arg)
+    console.log(SELECT_TEXT + (await clientSelectText(arg, rest[0] ?? "", rest[1] ?? "")));
   else if (cmd === "check-markup" && arg) assertMarkup(readFileSync(arg, "utf8"), rest);
   else
     throw new Error(
