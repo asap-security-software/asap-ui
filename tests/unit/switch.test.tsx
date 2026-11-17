@@ -24,6 +24,14 @@ describe("Switch", () => {
     expect(screen.getByRole("switch")).toHaveProperty("disabled", true);
   });
 
+  test("default size uses the h-6 and w-11 classes and not size-touch", () => {
+    render(<Switch aria-label="Notify the office" />);
+    const tokens = screen.getByRole("switch").className.split(/\s+/);
+    expect(tokens).toContain("h-6");
+    expect(tokens).toContain("w-11");
+    expect(tokens).not.toContain("size-touch");
+  });
+
   test("touch size is the 52px target", () => {
     render(<Switch aria-label="Notify the office" size="touch" />);
     expect(screen.getByRole("switch").className).toContain("size-touch");
