@@ -39,4 +39,29 @@ describe("Dialog", () => {
     await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+
+  test("returns focus to the trigger after Escape closes it", async () => {
+    const user = userEvent.setup();
+    render(<Example />);
+    const trigger = screen.getByRole("button", { name: "Edit task" });
+    await user.click(trigger);
+    // Opening moves focus off the trigger and into the dialog.
+    expect(screen.getByRole("dialog", { name: "Edit task" })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "Close" }));
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  test("returns focus to the trigger after the Close button closes it", async () => {
+    const user = userEvent.setup();
+    render(<Example />);
+    const trigger = screen.getByRole("button", { name: "Edit task" });
+    await user.click(trigger);
+    const close = screen.getByRole("button", { name: "Close" });
+    expect(document.activeElement).toBe(close);
+    await user.click(close);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
 });
