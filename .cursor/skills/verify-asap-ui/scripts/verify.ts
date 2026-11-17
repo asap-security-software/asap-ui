@@ -33,6 +33,7 @@ const FEATURES = [
   "tokens-theme",
   "form-controls",
   "overlays",
+  "menus",
 ];
 
 type Current = { id: string; runDir: string; consumer: string; smoke: string; smokeSha256: string };
@@ -544,6 +545,185 @@ async function clientOverlays(consumer: string, evidenceFile: string): Promise<v
   }
 }
 
+const MENUS_OK = "MENUS-OK";
+
+/** Fresh bun subprocess (same Radix import-time reason). Throws with the child's FAIL message. */
+function renderMenus(consumer: string, evidenceFile = ""): string {
+  const r = Bun.spawnSync(["bun", self, "client-menus", consumer, evidenceFile], {
+    cwd: root,
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (r.exitCode !== 0) throw new Error(`menus journey failed: ${r.stderr.toString().trim()}`);
+  if (r.stdout.toString().trim() !== MENUS_OK) throw new Error("menus journey did not finish");
+  return MENUS_OK;
+}
+
+/** Client journey for DropdownMenu then Select, driven from the keyboard: Tab to the trigger, open,
+ * Tab inside, ArrowDown, Enter, reopen, Escape. Keys are synthesized (happy-dom has no native keys).
+ * Everything comes from the consumer; document.activeElement and exact state asserted at every step. */
+async function clientMenus(consumer: string, evidenceFile: string): Promise<void> {
+  const { GlobalRegistrator } = await load(consumer, "@happy-dom/global-registrator");
+  GlobalRegistrator.register({ url: "http://localhost:3000/" });
+  Reflect.set(globalThis, "IS_REACT_ACT_ENVIRONMENT", true);
+  try {
+    const { createElement: h, act } = await load(consumer, "react");
+    const { createRoot } = await load(consumer, "react-dom/client");
+    const ui = await load(consumer, PKG);
+    const evidence: Record<string, Array<[string, Snap]>> = {};
+    for (const kind of ["dropdown", "select"] as const) {
+      const isMenu = kind === "dropdown";
+      // Labels and values differ between the two widgets, so no step can pass on the other's text.
+      const labels = isMenu
+        ? ["Rename draft", "Archive draft", "Delete draft"]
+        : ["Low urgency", "High urgency", "Top urgency"];
+      const ids = isMenu ? ["rename", "archive", "delete"] : ["low", "high", "top"];
+      const trigText = isMenu ? "Open actions" : "Pick a priority";
+      const afterText = isMenu ? trigText : labels[1]; // select trigger shows the chosen label
+      const role = isMenu ? "menu" : "listbox";
+      const result: string[] = [];
+      const host = document.createElement("div");
+      document.body.appendChild(host);
+      const app = createRoot(host);
+      await act(async () =>
+        app.render(
+          isMenu
+            ? h(
+                ui.DropdownMenu,
+                null,
+                h(ui.DropdownMenuTrigger, null, trigText),
+                h(
+                  ui.DropdownMenuContent,
+                  null,
+                  ...labels.map((l, i) =>
+                    h(ui.DropdownMenuItem, { key: l, onSelect: () => result.push(ids[i]) }, l),
+                  ),
+                ),
+              )
+            : h(
+                ui.Select,
+                { onValueChange: (v: string) => result.push(v) },
+                h(
+                  ui.SelectTrigger,
+                  { "aria-label": "Priority" },
+                  h(ui.SelectValue, { placeholder: trigText }),
+                ),
+                h(
+                  ui.SelectContent,
+                  null,
+                  ...labels.map((l, i) => h(ui.SelectItem, { key: l, value: ids[i] }, l)),
+                ),
+              ),
+        ),
+      );
+      const trigger = host.querySelector<HTMLElement>(
+        `[data-slot="${isMenu ? "dropdown-menu" : "select"}-trigger"]`,
+      );
+      if (!trigger) throw new Error(`${kind} trigger not rendered`);
+      const txt = (el: Element) => (el.textContent ?? "").trim();
+      const who = (el: Element | null) =>
+        !el || el === document.body ? (el?.tagName ?? "none") : txt(el) || el.tagName;
+      const items = () => [
+        ...document.querySelectorAll<HTMLElement>(`[role="${isMenu ? "menuitem" : "option"}"]`),
+      ];
+      const content = () =>
+        document.querySelectorAll(`[data-slot="${isMenu ? "dropdown-menu" : "select"}-content"]`);
+      const names = (keep: (e: HTMLElement) => boolean) => items().filter(keep).map(txt).join("|");
+      const snap = (): Snap => ({
+        "trigger.expanded": trigger.getAttribute("aria-expanded") ?? "",
+        "trigger.state": trigger.getAttribute("data-state") ?? "",
+        "content.count": String(content().length),
+        "content.role": content()[0]?.getAttribute("role") ?? "",
+        result: result.join(","),
+        "trigger.text": txt(trigger),
+        items: names(() => true),
+        highlighted: names((e) => e.hasAttribute("data-highlighted")),
+        checked: names((e) => e.getAttribute("data-state") === "checked"),
+        focus: who(document.activeElement),
+      });
+      const closed: Snap = {
+        "trigger.expanded": "false",
+        "trigger.state": "closed",
+        "content.count": "0",
+        "content.role": "",
+        result: "",
+        "trigger.text": trigText,
+        items: "",
+        highlighted: "",
+        checked: "",
+        focus: "BODY",
+      };
+      const open = (hi: number, extra: Snap = {}): Snap => ({
+        ...closed,
+        "trigger.expanded": "true",
+        "trigger.state": "open",
+        "content.count": "1",
+        "content.role": role,
+        items: labels.join("|"),
+        highlighted: labels[hi],
+        focus: labels[hi],
+        ...extra,
+      });
+      const log: Array<[string, Snap]> = [];
+      const check = (step: string, expected: Snap, el: Element | null) => {
+        const actual = snap();
+        for (const [k, want] of Object.entries(expected))
+          if (actual[k] !== want)
+            throw new Error(`${kind} step "${step}": ${k} is "${actual[k]}", expected "${want}"`);
+        if (document.activeElement !== el)
+          throw new Error(
+            `${kind} step "${step}": focus is on "${who(document.activeElement)}", expected "${who(el)}"`,
+          );
+        log.push([step, actual]);
+      };
+      const press = async (key: string) => {
+        const from = document.activeElement ?? document.body;
+        await act(async () => {
+          const ev = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+          if (from.dispatchEvent(ev) && key === "Tab") {
+            // Native Tab default (happy-dom has none): the next tabbable in document order.
+            const stops = [...document.querySelectorAll<HTMLElement>("button")].filter(
+              (e) => e.tabIndex >= 0,
+            );
+            stops[(stops.indexOf(from as HTMLElement) + 1) % stops.length]?.focus();
+          }
+        });
+        await act(async () => void (await new Promise((r) => setTimeout(r, 30))));
+      };
+      const item = (i: number) => items()[i] ?? null;
+      const picked = { "trigger.text": afterText, result: ids[1] };
+      check("initial", closed, document.body);
+      await press("Tab");
+      check("Tab into the trigger", { ...closed, focus: trigText }, trigger);
+      await press("Enter");
+      check("Enter opens", open(0), item(0));
+      await press("Tab");
+      check("Tab stays on the first item", open(0), item(0));
+      await press("ArrowDown");
+      check("ArrowDown moves to the second item", open(1), item(1));
+      await press("Enter");
+      check("Enter chooses", { ...closed, ...picked, focus: afterText }, trigger);
+      const hi = isMenu ? 0 : 1; // a menu reopens at its first item; a select at the chosen option
+      await press(isMenu ? "Enter" : "ArrowDown");
+      check(
+        isMenu ? "Enter reopens at the first item" : "ArrowDown reopens at the chosen option",
+        open(hi, { ...picked, checked: isMenu ? "" : labels[1] }),
+        item(hi),
+      );
+      await press("Escape");
+      check("Escape closes", { ...closed, ...picked, focus: afterText }, trigger);
+      evidence[kind] = log;
+      await act(async () => app.unmount());
+      host.remove();
+    }
+    if (evidenceFile) writeFileSync(evidenceFile, JSON.stringify(evidence, null, 2));
+    console.log(MENUS_OK);
+  } finally {
+    Reflect.deleteProperty(globalThis, "IS_REACT_ACT_ENVIRONMENT");
+    await GlobalRegistrator.unregister();
+  }
+}
+
 /** Offline: react, react-dom, tailwindcss, radix etc. come from this repo's node_modules. */
 function linkDeps(consumer: string): void {
   for (const name of readdirSync(path.join(root, "node_modules"))) {
@@ -710,6 +890,8 @@ async function drive(feature: string): Promise<void> {
     renderForm(c.consumer, path.join(c.runDir, "evidence", "form-controls-client.json"));
   } else if (feature === "overlays") {
     renderOverlays(c.consumer, path.join(c.runDir, "evidence", "overlays-client.json"));
+  } else if (feature === "menus") {
+    renderMenus(c.consumer, path.join(c.runDir, "evidence", "menus-client.json"));
   } else {
     throw new Error(`unknown feature ${feature}; one of ${FEATURES.join(", ")}`);
   }
@@ -1000,6 +1182,93 @@ async function selfCheck(): Promise<void> {
         if (!ook) failures.push(`overlays ${kind} ${label}`);
       }
     }
+    // menus: the DropdownMenu and Select keyboard journey against mutated consumers (same assertions).
+    const menuRender = async (c: string) => renderMenus(c);
+    await renderCopy("menus-ok", null, menuRender); // control: unmutated journey passes
+    const noKeys = "onKeyDown: (e) => e.preventDefault()";
+    const menuCases: Array<[string, string, (s: string) => string]> = [
+      [
+        "dropdown never opens",
+        'dropdown step "Enter opens": trigger.expanded is "false", expected "true"',
+        props("dropdown-menu-trigger", noKeys),
+      ],
+      [
+        "dropdown item action does not run",
+        'dropdown step "Enter chooses": result is "", expected "archive"',
+        props("dropdown-menu-item", "onSelect: () => {}"),
+      ],
+      [
+        "dropdown still open after selection",
+        'dropdown step "Enter chooses": trigger.expanded is "true", expected "false"',
+        props(
+          "dropdown-menu-item",
+          "onSelect: (e) => { props.onSelect?.(e); e.preventDefault(); }",
+        ),
+      ],
+      [
+        "dropdown still open after Escape",
+        'dropdown step "Escape closes": trigger.expanded is "true", expected "false"',
+        props("dropdown-menu-content", "onEscapeKeyDown: (e) => e.preventDefault()"),
+      ],
+      [
+        "dropdown focus not returned to trigger",
+        'dropdown step "Enter chooses": focus is "BODY", expected "Open actions"',
+        props("dropdown-menu-content", "onCloseAutoFocus: (e) => e.preventDefault()"),
+      ],
+      [
+        "dropdown reopens on the previous item",
+        'dropdown step "Enter reopens at the first item": highlighted is "Archive draft", expected "Rename draft"',
+        // From the second open on, focus lands on the second item instead of the first.
+        props(
+          "dropdown-menu-content",
+          `onOpenAutoFocus: (e) => { globalThis.__o = (globalThis.__o ?? 0) + 1; if (globalThis.__o > 1) { e.preventDefault(); document.querySelectorAll('[role="menuitem"]')[1]?.focus(); } }`,
+        ),
+      ],
+      [
+        "select never opens",
+        'select step "Enter opens": trigger.expanded is "false", expected "true"',
+        props("select-trigger", noKeys),
+      ],
+      [
+        "select value does not change",
+        'select step "Enter chooses": trigger.text is "Pick a priority", expected "High urgency"',
+        (s) =>
+          s.replace(
+            '"data-slot": "select", ...props',
+            '"data-slot": "select", ...props, value: ""',
+          ),
+      ],
+      [
+        "select chooses the wrong item",
+        'select step "Enter chooses": result is "top", expected "high"',
+        (s) =>
+          s.replace(
+            '"data-slot": "select", ...props',
+            '"data-slot": "select", ...props, onValueChange: (v) => props.onValueChange?.(v === "high" ? "top" : v)',
+          ),
+      ],
+      [
+        "select still open after Escape",
+        'select step "Escape closes": trigger.expanded is "true", expected "false"',
+        props("select-content", "onEscapeKeyDown: (e) => e.preventDefault()"),
+      ],
+      [
+        "select focus not returned to trigger",
+        'select step "Enter chooses": focus is "BODY", expected "High urgency"',
+        props("select-content", "onCloseAutoFocus: (e) => e.preventDefault()"),
+      ],
+    ];
+    for (const [n, [label, want, mutate]] of menuCases.entries()) {
+      let mmsg = "";
+      try {
+        await renderCopy(`menus-${n}`, mutate, menuRender, label);
+      } catch (e) {
+        mmsg = e instanceof Error ? e.message : String(e);
+      }
+      const mok = mmsg.includes(want);
+      console.log(`${mok ? "ok  " : "BAD "} menus ${label}: "${mmsg}"`);
+      if (!mok) failures.push(`menus ${label}`);
+    }
     // Packed package whose exports map lists a types file that is absent.
     const typesPkg = path.join(tmp, "types-pkg");
     mkdirSync(typesPkg);
@@ -1083,6 +1352,7 @@ try {
     console.log(SELECT_TEXT + (await clientSelectText(arg, rest[0] ?? "", rest[1] ?? "")));
   else if (cmd === "client-form" && arg) await clientForm(arg, rest[0] ?? "");
   else if (cmd === "client-overlays" && arg) await clientOverlays(arg, rest[0] ?? "");
+  else if (cmd === "client-menus" && arg) await clientMenus(arg, rest[0] ?? "");
   else if (cmd === "check-markup" && arg) assertMarkup(readFileSync(arg, "utf8"), rest);
   else
     throw new Error(
