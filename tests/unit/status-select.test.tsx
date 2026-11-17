@@ -74,7 +74,7 @@ function TrackedHarness({ onChange }: { onChange: (value: string) => void }) {
       aria-label="Status"
       value={value}
       options={options}
-      allowed={["progress"]}
+      allowed={value === "scheduled" ? ["progress"] : ["done"]}
       onValueChange={(next) => {
         onChange(next);
         setValue(next);
@@ -179,10 +179,8 @@ describe("StatusSelect", () => {
       expect(screen.queryByRole("listbox")).toBeNull();
       const closedTrigger = screen.getByRole("combobox", { name: "Status" });
       expect(closedTrigger.textContent).toBe("In progress");
-      // In this harness "progress" has no further allowed move, so the field
-      // locks itself (disabled) after the change and the browser drops focus.
-      expect(closedTrigger.hasAttribute("disabled")).toBe(true);
-      await waitFor(() => expect(document.activeElement).toBe(document.body));
+      expect(closedTrigger.hasAttribute("disabled")).toBe(false);
+      await waitFor(() => expect(document.activeElement).toBe(closedTrigger));
     });
   }
 });
