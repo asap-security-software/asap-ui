@@ -55,6 +55,7 @@ describe("Popover", () => {
     await user.click(trigger);
     expect(screen.getByText("Friday, Dec 12").textContent).toBe("Friday, Dec 12");
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.queryByRole("dialog")).not.toBeNull();
 
     await user.click(outside);
     expect(screen.queryByText("Friday, Dec 12")).toBeNull();
