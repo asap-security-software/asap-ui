@@ -26,6 +26,12 @@ describe("fieldControlVariants", () => {
     expect(tokens(fieldControlVariants())).toContain("h-control-lg");
   });
 
+  test("md is chrome plus the exact md size classes", () => {
+    expect(fieldControlVariants({ size: "md" })).toBe(
+      `${fieldChrome} h-control rounded-md px-3 text-asap-sm`,
+    );
+  });
+
   test("lg is chrome plus the exact lg size classes", () => {
     expect(fieldControlVariants({ size: "lg" })).toBe(
       `${fieldChrome} h-control-lg rounded-md px-3.5 text-asap-md`,
@@ -40,6 +46,25 @@ describe("fieldControlVariants", () => {
 });
 
 describe("textareaVariants", () => {
+  test("md is chrome plus the exact md size classes", () => {
+    expect(textareaVariants({ size: "md" })).toBe(
+      `${fieldChrome} block resize-y min-h-20 rounded-md px-3 py-2 text-asap-sm`,
+    );
+  });
+
+  test("lg is chrome plus the exact lg size classes", () => {
+    expect(textareaVariants({ size: "lg" })).toBe(
+      `${fieldChrome} block resize-y min-h-24 rounded-md px-3.5 py-2.5 text-asap-md`,
+    );
+  });
+
+  test("defaults to the lg size", () => {
+    expect(textareaVariants()).toBe(textareaVariants({ size: "lg" }));
+    expect(textareaVariants()).toBe(
+      `${fieldChrome} block resize-y min-h-24 rounded-md px-3.5 py-2.5 text-asap-md`,
+    );
+  });
+
   test("touch uses min-h-36, not min-h-touch", () => {
     const classes = textareaVariants({ size: "touch" });
     expect(tokens(classes)).toContain("min-h-36");
