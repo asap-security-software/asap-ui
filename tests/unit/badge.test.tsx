@@ -31,7 +31,6 @@ describe("Badge", () => {
     expect(classes).toContain("text-scheduled-foreground");
     const dot = badge.querySelector("[data-slot=badge-dot]");
     expect(dot).not.toBeNull();
-    expect(dot?.getAttribute("data-slot")).toBe("badge-dot");
     expect(tokens(dot)).toContain("bg-scheduled");
   });
 
@@ -56,12 +55,20 @@ describe("Badge", () => {
   }
 
   test("each tone excludes the other tones' pill and dot classes", () => {
-    render(<Badge status="done">Only done</Badge>);
-    const badge = screen.getByText("Only done");
-    const classes = tokens(badge);
-    expect(classes).not.toContain("bg-danger-soft");
-    expect(classes).not.toContain("bg-scheduled-soft");
-    expect(tokens(badge.querySelector("[data-slot=badge-dot]"))).not.toContain("bg-scheduled");
+    for (const { status } of tones) {
+      const { unmount } = render(<Badge status={status}>{`only-${status}`}</Badge>);
+      const badge = screen.getByText(`only-${status}`);
+      const classes = tokens(badge);
+      const dotClasses = tokens(badge.querySelector("[data-slot=badge-dot]"));
+      for (const other of tones) {
+        if (other.status === status) continue;
+        for (const token of other.pill) {
+          expect(classes).not.toContain(token);
+        }
+        expect(dotClasses).not.toContain(other.dot);
+      }
+      unmount();
+    }
   });
 
   test("sm size sets exact size classes and is the default", () => {
