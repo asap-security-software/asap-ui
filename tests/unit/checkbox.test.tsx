@@ -29,6 +29,13 @@ describe("Checkbox", () => {
     expect(screen.getByRole("checkbox")).toHaveProperty("disabled", true);
   });
 
+  test("default size uses the size-5 class and not size-touch", () => {
+    render(<Checkbox aria-label="Include parts" />);
+    const tokens = screen.getByRole("checkbox").className.split(/\s+/);
+    expect(tokens).toContain("size-5");
+    expect(tokens).not.toContain("size-touch");
+  });
+
   test("touch size is the 52px target", () => {
     render(<Checkbox aria-label="Include parts" size="touch" />);
     expect(screen.getByRole("checkbox").className).toContain("size-touch");
