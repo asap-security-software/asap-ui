@@ -103,55 +103,68 @@ describe("DropdownMenu", () => {
     expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Mark done" }));
   });
 
-  test("Enter on a focused item runs it, closes the menu and refocuses the trigger", async () => {
-    const user = userEvent.setup();
-    const calls: string[] = [];
-    render(
-      <DropdownMenu>
-        <DropdownMenuTrigger>Actions</DropdownMenuTrigger>
-        <DropdownMenuContent>
-          <DropdownMenuItem onSelect={() => calls.push("done")}>Mark done</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => calls.push("archive")}>Archive</DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>,
-    );
-    const trigger = screen.getByRole("button", { name: "Actions" });
-    await user.tab();
-    expect(document.activeElement).toBe(trigger);
-    await user.keyboard("{Enter}");
-    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Mark done" }));
-    await user.keyboard("{ArrowDown}");
-    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Archive" }));
-    await user.keyboard("{Enter}");
-    expect(calls).toEqual(["archive"]);
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-    expect(screen.queryByRole("menuitem")).toBeNull();
-    await waitFor(() => expect(document.activeElement).toBe(trigger));
-  });
+  test.each([
+    ["Enter", "{Enter}"],
+    ["Space", " "],
+  ])(
+    "%s on a focused item runs it, closes the menu and refocuses the trigger",
+    async (_name, key) => {
+      const user = userEvent.setup();
+      const calls: string[] = [];
+      render(
+        <DropdownMenu>
+          <DropdownMenuTrigger>Actions</DropdownMenuTrigger>
+          <DropdownMenuContent>
+            <DropdownMenuItem onSelect={() => calls.push("done")}>Mark done</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => calls.push("archive")}>Archive</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>,
+      );
+      const trigger = screen.getByRole("button", { name: "Actions" });
+      await user.tab();
+      expect(document.activeElement).toBe(trigger);
+      await user.keyboard("{Enter}");
+      expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Mark done" }));
+      await user.keyboard("{ArrowDown}");
+      expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Archive" }));
+      await user.keyboard(key);
+      expect(calls).toEqual(["archive"]);
+      await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+      expect(screen.queryByRole("menuitem")).toBeNull();
+      await waitFor(() => expect(document.activeElement).toBe(trigger));
+    },
+  );
 
-  test("Enter on a radio item chooses it, closes the menu and refocuses the trigger", async () => {
-    const user = userEvent.setup();
-    const values: string[] = [];
-    render(<RadioHarness values={values} />);
-    const trigger = screen.getByRole("button", { name: "Sort" });
-    await user.tab();
-    expect(document.activeElement).toBe(trigger);
-    await user.keyboard("{Enter}");
-    expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "Name" }));
-    await user.keyboard("{ArrowDown}");
-    expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "Date" }));
-    await user.keyboard("{Enter}");
-    expect(values).toEqual(["date"]);
-    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-    await waitFor(() => expect(document.activeElement).toBe(trigger));
-    await user.keyboard("{Enter}");
-    const name = screen.getByRole("menuitemradio", { name: "Name" });
-    const date = screen.getByRole("menuitemradio", { name: "Date" });
-    expect(date.getAttribute("aria-checked")).toBe("true");
-    expect(date.getAttribute("data-state")).toBe("checked");
-    expect(name.getAttribute("aria-checked")).toBe("false");
-    expect(name.getAttribute("data-state")).toBe("unchecked");
-  });
+  test.each([
+    ["Enter", "{Enter}"],
+    ["Space", " "],
+  ])(
+    "%s on a radio item chooses it, closes the menu and refocuses the trigger",
+    async (_name, key) => {
+      const user = userEvent.setup();
+      const values: string[] = [];
+      render(<RadioHarness values={values} />);
+      const trigger = screen.getByRole("button", { name: "Sort" });
+      await user.tab();
+      expect(document.activeElement).toBe(trigger);
+      await user.keyboard("{Enter}");
+      expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "Name" }));
+      await user.keyboard("{ArrowDown}");
+      expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "Date" }));
+      await user.keyboard(key);
+      expect(values).toEqual(["date"]);
+      await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+      await waitFor(() => expect(document.activeElement).toBe(trigger));
+      await user.keyboard("{Enter}");
+      const name = screen.getByRole("menuitemradio", { name: "Name" });
+      const date = screen.getByRole("menuitemradio", { name: "Date" });
+      expect(document.activeElement).toBe(name);
+      expect(date.getAttribute("aria-checked")).toBe("true");
+      expect(date.getAttribute("data-state")).toBe("checked");
+      expect(name.getAttribute("aria-checked")).toBe("false");
+      expect(name.getAttribute("data-state")).toBe("unchecked");
+    },
+  );
 
   test("touch items use the 52px target", async () => {
     const user = userEvent.setup();
