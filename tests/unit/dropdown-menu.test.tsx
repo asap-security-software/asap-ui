@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import {
@@ -76,6 +76,81 @@ describe("DropdownMenu", () => {
     await user.click(screen.getByRole("button", { name: "Actions" }));
     await user.click(screen.getByRole("menuitem", { name: "Mark done" }));
     expect(calls).toEqual(["done"]);
+  });
+
+  test.each([
+    ["Enter", "{Enter}"],
+    ["Space", " "],
+  ])("%s on the trigger opens the menu and focuses the first item", async (_name, key) => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu>
+        <DropdownMenuTrigger>Actions</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem>Mark done</DropdownMenuItem>
+          <DropdownMenuItem>Archive</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.tab();
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.queryByRole("menu")).toBeNull();
+    await user.keyboard(key);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Mark done" })).toBeTruthy();
+    expect(screen.getByRole("menuitem", { name: "Archive" })).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Mark done" }));
+  });
+
+  test("Enter on a focused item runs it, closes the menu and refocuses the trigger", async () => {
+    const user = userEvent.setup();
+    const calls: string[] = [];
+    render(
+      <DropdownMenu>
+        <DropdownMenuTrigger>Actions</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem onSelect={() => calls.push("done")}>Mark done</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => calls.push("archive")}>Archive</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.tab();
+    expect(document.activeElement).toBe(trigger);
+    await user.keyboard("{Enter}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Mark done" }));
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Archive" }));
+    await user.keyboard("{Enter}");
+    expect(calls).toEqual(["archive"]);
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    expect(screen.queryByRole("menuitem")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  test("Enter on a radio item chooses it, closes the menu and refocuses the trigger", async () => {
+    const user = userEvent.setup();
+    const values: string[] = [];
+    render(<RadioHarness values={values} />);
+    const trigger = screen.getByRole("button", { name: "Sort" });
+    await user.tab();
+    expect(document.activeElement).toBe(trigger);
+    await user.keyboard("{Enter}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "Name" }));
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).toBe(screen.getByRole("menuitemradio", { name: "Date" }));
+    await user.keyboard("{Enter}");
+    expect(values).toEqual(["date"]);
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    await user.keyboard("{Enter}");
+    const name = screen.getByRole("menuitemradio", { name: "Name" });
+    const date = screen.getByRole("menuitemradio", { name: "Date" });
+    expect(date.getAttribute("aria-checked")).toBe("true");
+    expect(date.getAttribute("data-state")).toBe("checked");
+    expect(name.getAttribute("aria-checked")).toBe("false");
+    expect(name.getAttribute("data-state")).toBe("unchecked");
   });
 
   test("touch items use the 52px target", async () => {
