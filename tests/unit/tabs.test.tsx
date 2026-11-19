@@ -100,6 +100,83 @@ describe("Tabs", () => {
     expect(screen.queryByText("Backboxes are on site.")).toBeNull();
   });
 
+  const homeEndTabs = [
+    { value: "intake", label: "Intake", text: "Intake: two readers." },
+    { value: "wiring", label: "Wiring", text: "Wiring: backboxes on site." },
+    { value: "photos", label: "Photos", text: "Photos: eleven uploaded." },
+    { value: "signoff", label: "Signoff", text: "Signoff: awaiting client." },
+  ];
+
+  // Renders the tabs with a middle one (`selected`) selected and focused, then presses `key` on it.
+  // `disabledValue` disables one trigger.
+  async function pressOnSelectedMiddle(
+    key: "Home" | "End",
+    selected: "wiring" | "photos",
+    disabledValue?: string,
+  ) {
+    const user = userEvent.setup();
+    render(
+      <Tabs defaultValue={selected}>
+        <TabsList>
+          {homeEndTabs.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value} disabled={tab.value === disabledValue}>
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+        {homeEndTabs.map((tab) => (
+          <TabsContent key={tab.value} value={tab.value}>
+            {tab.text}
+          </TabsContent>
+        ))}
+      </Tabs>,
+    );
+    const start = screen.getByRole("tab", { name: selected === "wiring" ? "Wiring" : "Photos" });
+    await user.tab();
+    expect(document.activeElement).toBe(start);
+    expect(start.getAttribute("aria-selected")).toBe("true");
+    await user.keyboard(`{${key}}`);
+  }
+
+  function expectOnlyTabSelected(label: string) {
+    const target = homeEndTabs.find((tab) => tab.label === label);
+    expect(target).not.toBeUndefined();
+    const trigger = screen.queryByRole("tab", { name: label });
+    expect(trigger).not.toBeNull();
+    expect(document.activeElement).toBe(trigger);
+    for (const tab of homeEndTabs) {
+      expect(screen.getByRole("tab", { name: tab.label }).getAttribute("aria-selected")).toBe(
+        tab.label === label ? "true" : "false",
+      );
+    }
+    expect(screen.queryByText(target?.text ?? "")).not.toBeNull();
+    for (const tab of homeEndTabs) {
+      if (tab.label !== label) expect(screen.queryByText(tab.text)).toBeNull();
+    }
+  }
+
+  test("Home from a middle tab selects, focuses, and shows the first tab", async () => {
+    await pressOnSelectedMiddle("Home", "wiring");
+    expectOnlyTabSelected("Intake");
+  });
+
+  test("End from a middle tab selects, focuses, and shows the last tab", async () => {
+    await pressOnSelectedMiddle("End", "photos");
+    expectOnlyTabSelected("Signoff");
+  });
+
+  test("Home lands on the first enabled tab when the first trigger is disabled", async () => {
+    await pressOnSelectedMiddle("Home", "photos", "intake");
+    expect(screen.getByRole("tab", { name: "Intake" }).hasAttribute("disabled")).toBe(true);
+    expectOnlyTabSelected("Wiring");
+  });
+
+  test("End lands on the last enabled tab when the last trigger is disabled", async () => {
+    await pressOnSelectedMiddle("End", "wiring", "signoff");
+    expect(screen.getByRole("tab", { name: "Signoff" }).hasAttribute("disabled")).toBe(true);
+    expectOnlyTabSelected("Photos");
+  });
+
   test("touch triggers use the tall target", () => {
     render(
       <Tabs defaultValue="details">
