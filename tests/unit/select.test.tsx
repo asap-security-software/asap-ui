@@ -84,9 +84,9 @@ describe("Select", () => {
     });
   }
 
-  function renderControlled(onValueChange: (value: string) => void) {
+  function renderWithValue(onValueChange: (value: string) => void) {
     render(
-      <Select value="progress" onValueChange={onValueChange}>
+      <Select defaultValue="progress" onValueChange={onValueChange}>
         <SelectTrigger aria-label="Status">
           <SelectValue placeholder="Choose a status" />
         </SelectTrigger>
@@ -102,13 +102,16 @@ describe("Select", () => {
   test("Escape after opening with Enter closes the list, keeps the value and returns focus to the trigger", async () => {
     const user = userEvent.setup();
     const changes: string[] = [];
-    const trigger = renderControlled((value) => changes.push(value));
+    const trigger = renderWithValue((value) => changes.push(value));
     expect(trigger.textContent).toBe("In progress");
 
     await user.tab();
     expect(document.activeElement).toBe(trigger);
     await user.keyboard("{Enter}");
     expect(screen.queryByRole("listbox")).not.toBeNull();
+    const scheduled = screen.getByRole("option", { name: "Scheduled" });
+    await user.keyboard("{ArrowUp}");
+    await waitFor(() => expect(document.activeElement).toBe(scheduled));
 
     await user.keyboard("{Escape}");
 
@@ -122,11 +125,14 @@ describe("Select", () => {
   test("Escape after opening with a pointer click closes the list, keeps the value and returns focus to the trigger", async () => {
     const user = userEvent.setup();
     const changes: string[] = [];
-    const trigger = renderControlled((value) => changes.push(value));
+    const trigger = renderWithValue((value) => changes.push(value));
     expect(trigger.textContent).toBe("In progress");
 
     await user.click(trigger);
     expect(screen.queryByRole("listbox")).not.toBeNull();
+    const scheduled = screen.getByRole("option", { name: "Scheduled" });
+    await user.keyboard("{ArrowUp}");
+    await waitFor(() => expect(document.activeElement).toBe(scheduled));
 
     await user.keyboard("{Escape}");
 
