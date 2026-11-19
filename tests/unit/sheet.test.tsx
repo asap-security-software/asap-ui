@@ -77,4 +77,66 @@ describe("Sheet", () => {
     expect(screen.queryByText("North wing readers")).toBeNull();
     expect(document.activeElement).toBe(trigger);
   });
+
+  describe("focus trap", () => {
+    async function openSheet() {
+      const user = userEvent.setup();
+      render(
+        <>
+          <button type="button">Outside control</button>
+          <Sheet>
+            <SheetTrigger>Open task</SheetTrigger>
+            <SheetContent>
+              <SheetTitle>North wing readers</SheetTitle>
+              <SheetDescription>Replace the two failed readers.</SheetDescription>
+              <input aria-label="Task title" />
+              <button type="button">Save</button>
+            </SheetContent>
+          </Sheet>
+        </>,
+      );
+      await user.click(screen.getByRole("button", { name: "Open task" }));
+      const dialog = screen.queryByRole("dialog", { name: "North wing readers" });
+      expect(dialog).not.toBeNull();
+      return {
+        user,
+        outside: screen.getByRole("button", { name: "Outside control", hidden: true }),
+        field: screen.getByRole("textbox", { name: "Task title" }),
+        save: screen.getByRole("button", { name: "Save" }),
+        close: screen.getByRole("button", { name: "Close" }),
+      };
+    }
+
+    test("Tab from the last control wraps to the first and never reaches the outside button", async () => {
+      const { user, outside, field, save, close } = await openSheet();
+      expect(document.activeElement).toBe(field);
+      await user.tab();
+      expect(document.activeElement).toBe(save);
+      await user.tab();
+      expect(document.activeElement).toBe(close);
+
+      const stops: Array<Element | null> = [];
+      for (let i = 0; i < 3; i++) {
+        await user.tab();
+        stops.push(document.activeElement);
+      }
+      expect(stops).toEqual([field, save, close]);
+      expect(stops.some((stop) => stop === outside)).toBe(false);
+      expect(document.activeElement).toBe(close);
+    });
+
+    test("Shift+Tab from the first control wraps to the last and never reaches the outside button", async () => {
+      const { user, outside, field, save, close } = await openSheet();
+      expect(document.activeElement).toBe(field);
+
+      const stops: Array<Element | null> = [];
+      for (let i = 0; i < 3; i++) {
+        await user.tab({ shift: true });
+        stops.push(document.activeElement);
+      }
+      expect(stops).toEqual([close, save, field]);
+      expect(stops.some((stop) => stop === outside)).toBe(false);
+      expect(document.activeElement).toBe(field);
+    });
+  });
 });
