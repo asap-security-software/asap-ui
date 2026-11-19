@@ -183,4 +183,38 @@ describe("StatusSelect", () => {
       await waitFor(() => expect(document.activeElement).toBe(closedTrigger));
     });
   }
+
+  for (const opener of ["Enter", "pointer click"]) {
+    test(`Escape after opening with ${opener} and moving the highlight closes the list, keeps Scheduled and returns focus to the trigger`, async () => {
+      const user = userEvent.setup();
+      const changes: string[] = [];
+      render(<TrackedHarness onChange={(next) => changes.push(next)} />);
+      const trigger = screen.getByRole("combobox", { name: "Status" });
+      expect(trigger.textContent).toBe("Scheduled");
+
+      if (opener === "Enter") {
+        await user.tab();
+        expect(document.activeElement).toBe(trigger);
+        await user.keyboard("{Enter}");
+      } else {
+        await user.click(trigger);
+      }
+      const progress = screen.getByRole("option", { name: "In progress" });
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole("option", { name: "Scheduled" })),
+      );
+      await user.keyboard("{ArrowDown}");
+      await waitFor(() => expect(document.activeElement).toBe(progress));
+      expect(screen.queryByRole("listbox")).not.toBeNull();
+
+      await user.keyboard("{Escape}");
+
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(changes).toHaveLength(0);
+      const closedTrigger = screen.getByRole("combobox", { name: "Status" });
+      expect(closedTrigger.textContent).toBe("Scheduled");
+      expect(closedTrigger.hasAttribute("disabled")).toBe(false);
+      await waitFor(() => expect(document.activeElement).toBe(closedTrigger));
+    });
+  }
 });
