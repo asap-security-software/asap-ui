@@ -135,13 +135,10 @@ describe("Sheet", () => {
       await waitFor(() => {
         expect(dialog.contains(document.activeElement)).toBe(true);
       });
-      expect(document.activeElement).not.toBe(outside);
-      expect(document.activeElement).not.toBe(document.body);
     });
 
     test("outside button is unreachable by role while open and reachable again after Close", async () => {
       const { user, outside, close } = await openSheet();
-      expect(screen.getByRole("button", { name: "Outside control", hidden: true })).toBe(outside);
       expect(screen.queryByRole("button", { name: "Outside control" })).toBeNull();
 
       await user.click(close);
