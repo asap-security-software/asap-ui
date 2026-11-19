@@ -6,17 +6,20 @@ type Namespace = Record<string, unknown>;
 
 // Internal helpers used only by Input, Select and Textarea; tests/unit/control.test.ts
 // imports them directly. Not public API, so src/index.ts must NOT export them.
-const allowlist: Record<string, string> = {
-  fieldChrome: "internal helper for Input, Select and Textarea",
-  fieldControlVariants: "internal helper for Input, Select and Textarea",
-  textareaVariants: "internal helper for Input, Select and Textarea",
+// Keyed by ui module file name: a name is only skipped for the module it is listed under.
+const allowlist: Record<string, Record<string, string>> = {
+  "control.ts": {
+    fieldChrome: "internal helper for Input, Select and Textarea",
+    fieldControlVariants: "internal helper for Input, Select and Textarea",
+    textareaVariants: "internal helper for Input, Select and Textarea",
+  },
 };
-const allowlisted = Object.keys(allowlist).sort();
+const allowlisted = Object.keys(allowlist["control.ts"] ?? {}).sort();
 
 // Runtime exports only: types are erased at runtime, which is intended.
-function missingFromIndex(moduleExports: Namespace, index: Namespace): string[] {
+function missingFromIndex(file: string, moduleExports: Namespace, index: Namespace): string[] {
   return Object.keys(moduleExports)
-    .filter((name) => !(name in allowlist) && !(name in index))
+    .filter((name) => !(name in index) && allowlist[file]?.[name] === undefined)
     .sort();
 }
 
@@ -39,6 +42,7 @@ describe("src/index.ts re-exports src/components/ui/*", () => {
   });
 
   test("the allowlist is exactly fieldChrome, fieldControlVariants, textareaVariants", () => {
+    expect(Object.keys(allowlist)).toEqual(["control.ts"]);
     expect(allowlisted).toEqual(["fieldChrome", "fieldControlVariants", "textareaVariants"]);
   });
 
@@ -53,7 +57,7 @@ describe("src/index.ts re-exports src/components/ui/*", () => {
   for (const file of files) {
     test(`every runtime export of src/components/ui/${file} is re-exported from src/index.ts, except the allowlist`, () => {
       const ns = modules.get(file) ?? {};
-      expect({ file, missing: missingFromIndex(ns, index) }).toEqual({ file, missing: [] });
+      expect({ file, missing: missingFromIndex(file, ns, index) }).toEqual({ file, missing: [] });
     });
 
     test(`every re-exported name of src/components/ui/${file} is the same binding in src/index.ts`, () => {
@@ -65,10 +69,17 @@ describe("src/index.ts re-exports src/components/ui/*", () => {
 
   test("missingFromIndex reports a missing export and ignores allowlisted helpers", () => {
     const moduleExports = { Tabs: 1, TabsList: 2, fieldChrome: 3 };
-    expect(missingFromIndex(moduleExports, { Tabs: 1 })).toEqual(["TabsList"]);
+    expect(missingFromIndex("control.ts", moduleExports, { Tabs: 1 })).toEqual(["TabsList"]);
   });
 
   test("missingFromIndex does not report an allowlisted helper missing from the index", () => {
-    expect(missingFromIndex({ fieldChrome: 1, textareaVariants: 2 }, {})).toEqual([]);
+    expect(missingFromIndex("control.ts", { fieldChrome: 1, textareaVariants: 2 }, {})).toEqual([]);
+  });
+
+  test("missingFromIndex reports a control.ts allowlisted name exported by another module", () => {
+    expect(missingFromIndex("skeleton.tsx", { fieldChrome: 1, textareaVariants: 2 }, {})).toEqual([
+      "fieldChrome",
+      "textareaVariants",
+    ]);
   });
 });
