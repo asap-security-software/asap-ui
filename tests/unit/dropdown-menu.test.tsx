@@ -9,6 +9,9 @@ import {
   DropdownMenuItem,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "../../src/components/ui/dropdown-menu";
 
@@ -50,6 +53,24 @@ function RadioHarness({ values }: { values: string[] }) {
           <DropdownMenuRadioItem value="name">Name</DropdownMenuRadioItem>
           <DropdownMenuRadioItem value="date">Date</DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+function SubHarness({ calls }: { calls: string[] }) {
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger>Actions</DropdownMenuTrigger>
+      <DropdownMenuContent>
+        <DropdownMenuItem>Archive</DropdownMenuItem>
+        <DropdownMenuSub>
+          <DropdownMenuSubTrigger>Move to</DropdownMenuSubTrigger>
+          <DropdownMenuSubContent>
+            <DropdownMenuItem onSelect={() => calls.push("inbox")}>Inbox</DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => calls.push("trash")}>Trash</DropdownMenuItem>
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
       </DropdownMenuContent>
     </DropdownMenu>
   );
@@ -224,6 +245,64 @@ describe("DropdownMenu", () => {
     expect(calls).toEqual(["archive"]);
     await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
     await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  describe("submenu", () => {
+    async function focusSubTrigger(user: ReturnType<typeof userEvent.setup>) {
+      await user.tab();
+      await user.keyboard("{Enter}");
+      await user.keyboard("{ArrowDown}");
+      const subTrigger = screen.getByRole("menuitem", { name: "Move to" });
+      expect(document.activeElement).toBe(subTrigger);
+      return subTrigger;
+    }
+
+    test("ArrowRight on the sub trigger opens the sub content and focuses its first item", async () => {
+      const user = userEvent.setup();
+      render(<SubHarness calls={[]} />);
+      await focusSubTrigger(user);
+      expect(screen.queryByRole("menuitem", { name: "Inbox" })).toBeNull();
+      await user.keyboard("{ArrowRight}");
+      await waitFor(() => expect(screen.queryByRole("menuitem", { name: "Inbox" })).not.toBeNull());
+      expect(screen.queryByRole("menuitem", { name: "Trash" })).not.toBeNull();
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Inbox" })),
+      );
+    });
+
+    test("ArrowLeft closes only the sub content and refocuses the sub trigger", async () => {
+      const user = userEvent.setup();
+      render(<SubHarness calls={[]} />);
+      const subTrigger = await focusSubTrigger(user);
+      await user.keyboard("{ArrowRight}");
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Inbox" })),
+      );
+      await user.keyboard("{ArrowLeft}");
+      await waitFor(() => expect(screen.queryByRole("menuitem", { name: "Inbox" })).toBeNull());
+      expect(screen.queryByRole("menuitem", { name: "Trash" })).toBeNull();
+      await waitFor(() => expect(document.activeElement).toBe(subTrigger));
+      expect(screen.queryByRole("menuitem", { name: "Archive" })).not.toBeNull();
+    });
+
+    test("Enter on a sub item runs it once, closes the whole menu and refocuses the trigger", async () => {
+      const user = userEvent.setup();
+      const calls: string[] = [];
+      render(<SubHarness calls={calls} />);
+      const trigger = screen.getByRole("button", { name: "Actions" });
+      await focusSubTrigger(user);
+      await user.keyboard("{ArrowRight}");
+      await waitFor(() =>
+        expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Inbox" })),
+      );
+      await user.keyboard("{ArrowDown}");
+      expect(document.activeElement).toBe(screen.getByRole("menuitem", { name: "Trash" }));
+      await user.keyboard("{Enter}");
+      expect(calls).toEqual(["trash"]);
+      await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+      expect(screen.queryByRole("menuitem")).toBeNull();
+      await waitFor(() => expect(document.activeElement).toBe(trigger));
+    });
   });
 
   test("variant danger sets the danger tokens and the default variant does not", async () => {
