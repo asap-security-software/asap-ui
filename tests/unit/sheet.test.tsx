@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
   Sheet,
@@ -96,10 +96,10 @@ describe("Sheet", () => {
         </>,
       );
       await user.click(screen.getByRole("button", { name: "Open task" }));
-      const dialog = screen.queryByRole("dialog", { name: "North wing readers" });
-      expect(dialog).not.toBeNull();
+      const dialog = screen.getByRole("dialog", { name: "North wing readers" });
       return {
         user,
+        dialog,
         outside: screen.getByRole("button", { name: "Outside control", hidden: true }),
         field: screen.getByRole("textbox", { name: "Task title" }),
         save: screen.getByRole("button", { name: "Save" }),
@@ -108,7 +108,7 @@ describe("Sheet", () => {
     }
 
     test("Tab from the last control wraps to the first and never reaches the outside button", async () => {
-      const { user, outside, field, save, close } = await openSheet();
+      const { user, field, save, close } = await openSheet();
       expect(document.activeElement).toBe(field);
       await user.tab();
       expect(document.activeElement).toBe(save);
@@ -121,12 +121,26 @@ describe("Sheet", () => {
         stops.push(document.activeElement);
       }
       expect(stops).toEqual([field, save, close]);
-      expect(stops.some((stop) => stop === outside)).toBe(false);
-      expect(document.activeElement).toBe(close);
+    });
+
+    test("hides outside content and returns focus into the sheet when outside is focused", async () => {
+      const { dialog, outside, field } = await openSheet();
+      expect(document.activeElement).toBe(field);
+      // Only modal mode hides the rest of the page from assistive tech.
+      expect(outside.closest("[aria-hidden=true]")).not.toBeNull();
+      expect(dialog.closest("[aria-hidden=true]")).toBeNull();
+      act(() => {
+        outside.focus();
+      });
+      await waitFor(() => {
+        expect(dialog.contains(document.activeElement)).toBe(true);
+      });
+      expect(document.activeElement).not.toBe(outside);
+      expect(document.activeElement).not.toBe(document.body);
     });
 
     test("Shift+Tab from the first control wraps to the last and never reaches the outside button", async () => {
-      const { user, outside, field, save, close } = await openSheet();
+      const { user, field, save, close } = await openSheet();
       expect(document.activeElement).toBe(field);
 
       const stops: Array<Element | null> = [];
@@ -135,8 +149,6 @@ describe("Sheet", () => {
         stops.push(document.activeElement);
       }
       expect(stops).toEqual([close, save, field]);
-      expect(stops.some((stop) => stop === outside)).toBe(false);
-      expect(document.activeElement).toBe(field);
     });
   });
 });
