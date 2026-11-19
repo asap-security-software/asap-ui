@@ -139,6 +139,19 @@ describe("Sheet", () => {
       expect(document.activeElement).not.toBe(document.body);
     });
 
+    test("outside button is unreachable by role while open and reachable again after Close", async () => {
+      const { user, outside, close } = await openSheet();
+      expect(screen.getByRole("button", { name: "Outside control", hidden: true })).toBe(outside);
+      expect(screen.queryByRole("button", { name: "Outside control" })).toBeNull();
+
+      await user.click(close);
+      await waitFor(() => {
+        expect(screen.queryByRole("dialog")).toBeNull();
+      });
+      expect(screen.queryByRole("button", { name: "Outside control" })).not.toBeNull();
+      expect(outside.closest("[aria-hidden=true]")).toBeNull();
+    });
+
     test("Shift+Tab from the first control wraps to the last and never reaches the outside button", async () => {
       const { user, field, save, close } = await openSheet();
       expect(document.activeElement).toBe(field);
