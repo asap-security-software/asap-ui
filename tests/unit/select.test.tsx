@@ -83,4 +83,57 @@ describe("Select", () => {
       await waitFor(() => expect(document.activeElement).toBe(closedTrigger));
     });
   }
+
+  function renderControlled(onValueChange: (value: string) => void) {
+    render(
+      <Select value="progress" onValueChange={onValueChange}>
+        <SelectTrigger aria-label="Status">
+          <SelectValue placeholder="Choose a status" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="scheduled">Scheduled</SelectItem>
+          <SelectItem value="progress">In progress</SelectItem>
+        </SelectContent>
+      </Select>,
+    );
+    return screen.getByRole("combobox", { name: "Status" });
+  }
+
+  test("Escape after opening with Enter closes the list, keeps the value and returns focus to the trigger", async () => {
+    const user = userEvent.setup();
+    const changes: string[] = [];
+    const trigger = renderControlled((value) => changes.push(value));
+    expect(trigger.textContent).toBe("In progress");
+
+    await user.tab();
+    expect(document.activeElement).toBe(trigger);
+    await user.keyboard("{Enter}");
+    expect(screen.queryByRole("listbox")).not.toBeNull();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(changes).toHaveLength(0);
+    const closedTrigger = screen.getByRole("combobox", { name: "Status" });
+    expect(closedTrigger.textContent).toBe("In progress");
+    await waitFor(() => expect(document.activeElement).toBe(closedTrigger));
+  });
+
+  test("Escape after opening with a pointer click closes the list, keeps the value and returns focus to the trigger", async () => {
+    const user = userEvent.setup();
+    const changes: string[] = [];
+    const trigger = renderControlled((value) => changes.push(value));
+    expect(trigger.textContent).toBe("In progress");
+
+    await user.click(trigger);
+    expect(screen.queryByRole("listbox")).not.toBeNull();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("listbox")).toBeNull();
+    expect(changes).toHaveLength(0);
+    const closedTrigger = screen.getByRole("combobox", { name: "Status" });
+    expect(closedTrigger.textContent).toBe("In progress");
+    await waitFor(() => expect(document.activeElement).toBe(closedTrigger));
+  });
 });
