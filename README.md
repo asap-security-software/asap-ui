@@ -60,7 +60,7 @@ export function TaskAction() {
 
 `StatusSelect` only lists the current status and the `allowed` moves. Wrap the app once in `TooltipProvider`, and mount `Toaster` where toasts should show. `toastWithUndo(message, onUndo)` is the toast with an Undo action.
 
-Form controls default to 44px (`lg`). Pass `size="touch"` for the 52px technician target on Input, Textarea, Select, StatusSelect, Button, Checkbox, Switch, Tabs, DropdownMenu, and Table.
+Input, Textarea, Select, and StatusSelect default to 44px (`lg`). Button, Checkbox, Switch, Tabs, and DropdownMenu default to `md`, and Table defaults to `dense`. Pass `size="touch"` for the 52px technician target on Input, Textarea, Select, StatusSelect, Button, Checkbox, Switch, Tabs, DropdownMenu, and Table.
 
 Put `className="asap-root"` on the app shell if you want the Inter/Geist stack, ink color, paper background, and tabular figures. Load Inter (or Geist) yourself. This package does not ship font files.
 
