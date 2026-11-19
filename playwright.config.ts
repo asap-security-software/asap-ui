@@ -10,7 +10,8 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:6006",
   },
   webServer: {
-    command: "bunx storybook dev --port 6006 --ci --no-open",
+    // Not `bunx storybook ...`: that resolves to the package.json `storybook` script and duplicates `dev`.
+    command: "bun run storybook --ci --no-open",
     url: "http://127.0.0.1:6006",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
