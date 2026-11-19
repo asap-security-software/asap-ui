@@ -82,6 +82,36 @@ describe("Dialog", () => {
     expect(document.activeElement).toBe(trigger);
   });
 
+  test("closes when the overlay is clicked and returns focus to the trigger", async () => {
+    const user = userEvent.setup();
+    render(<Example />);
+    const trigger = screen.getByRole("button", { name: "Edit task" });
+    await user.click(trigger);
+    expect(screen.queryByRole("dialog")).not.toBeNull();
+    const overlay = document.querySelector('[data-slot="dialog-overlay"]');
+    expect(overlay).not.toBeNull();
+    if (overlay === null) return;
+    await user.click(overlay);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.querySelector('[data-slot="dialog-overlay"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  test("describes the dialog with the DialogDescription text", async () => {
+    const user = userEvent.setup();
+    render(<Example />);
+    await user.click(screen.getByRole("button", { name: "Edit task" }));
+    const dialog = screen.queryByRole("dialog", { description: "Change the title." });
+    expect(dialog).not.toBeNull();
+    if (dialog === null) return;
+    const describedBy = dialog.getAttribute("aria-describedby");
+    expect(describedBy).not.toBeNull();
+    if (describedBy === null) return;
+    const description = document.getElementById(describedBy);
+    expect(description).not.toBeNull();
+    expect(description?.textContent).toBe("Change the title.");
+  });
+
   describe("focus trap", () => {
     async function openDialog() {
       const user = userEvent.setup();
