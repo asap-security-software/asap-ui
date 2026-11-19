@@ -166,6 +166,88 @@ describe("DropdownMenu", () => {
     },
   );
 
+  test("Escape closes an open menu, removes it from the DOM and refocuses the trigger", async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu>
+        <DropdownMenuTrigger>Actions</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem>Mark done</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.click(trigger);
+    expect(screen.queryByRole("menu")).not.toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "Mark done" })).not.toBeNull();
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    expect(screen.queryByRole("menuitem")).toBeNull();
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    expect(document.activeElement).not.toBe(document.body);
+  });
+
+  test("a disabled item never runs on click or Enter while its enabled sibling still does", async () => {
+    const user = userEvent.setup();
+    const calls: string[] = [];
+    render(
+      <DropdownMenu>
+        <DropdownMenuTrigger>Actions</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem disabled onSelect={() => calls.push("delete")}>
+            Delete
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => calls.push("archive")}>Archive</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    const trigger = screen.getByRole("button", { name: "Actions" });
+    await user.click(trigger);
+    const disabled = screen.getByRole("menuitem", { name: "Delete" });
+    const enabled = screen.getByRole("menuitem", { name: "Archive" });
+    expect(disabled.getAttribute("aria-disabled")).toBe("true");
+    expect(disabled.hasAttribute("data-disabled")).toBe(true);
+    expect(enabled.getAttribute("aria-disabled")).toBeNull();
+    expect(enabled.hasAttribute("data-disabled")).toBe(false);
+
+    await user.click(disabled);
+    expect(calls).toEqual([]);
+    expect(screen.queryByRole("menu")).not.toBeNull();
+
+    // Disabled items cannot take focus, so the keyboard path lands on the enabled sibling.
+    await user.keyboard("{ArrowDown}");
+    expect(document.activeElement).not.toBe(disabled);
+    await user.keyboard("{ArrowUp}");
+    expect(document.activeElement).not.toBe(disabled);
+    expect(document.activeElement).toBe(enabled);
+    await user.keyboard("{Enter}");
+    expect(calls).toEqual(["archive"]);
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+
+  test("variant danger sets the danger tokens and the default variant does not", async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu>
+        <DropdownMenuTrigger>Actions</DropdownMenuTrigger>
+        <DropdownMenuContent>
+          <DropdownMenuItem>Rename</DropdownMenuItem>
+          <DropdownMenuItem variant="danger">Delete</DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>,
+    );
+    await user.click(screen.getByRole("button", { name: "Actions" }));
+    const danger = screen.getByRole("menuitem", { name: "Delete" });
+    const normal = screen.getByRole("menuitem", { name: "Rename" });
+    expect(danger.getAttribute("data-variant")).toBe("danger");
+    expect(danger.classList.contains("text-danger")).toBe(true);
+    expect(danger.classList.contains("focus:bg-danger-soft")).toBe(true);
+    expect(normal.getAttribute("data-variant")).toBe("default");
+    expect(normal.classList.contains("text-danger")).toBe(false);
+    expect(normal.classList.contains("focus:bg-danger-soft")).toBe(false);
+  });
+
   test("touch items use the 52px target", async () => {
     const user = userEvent.setup();
     render(
